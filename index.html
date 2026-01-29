@@ -690,9 +690,10 @@
 
 <script>
     // ============================================
-    // CONFIGURATION - Update this to your server!
+    // CONFIGURATION - Your Vercel Server
     // ============================================
-    const SERVER_URL = '192.168.0.157:3000';
+    const SERVER_URL = 'adviser-server.vercel.app';
+    const USE_SSL = true;  // Vercel uses HTTPS/WSS
     
     // Sound settings
     let soundEnabled = false;
@@ -704,7 +705,9 @@
     const debugLast = document.getElementById('debugLast');
 
     // WebSocket connection
-    const wsUrl = `ws://${SERVER_URL}`;
+    const wsProtocol = USE_SSL ? 'wss:' : 'ws:';
+    const httpProtocol = USE_SSL ? 'https:' : 'http:';
+    const wsUrl = `${wsProtocol}//${SERVER_URL}`;
     console.log('Connecting to WebSocket:', wsUrl);
     
     let ws;
@@ -1011,7 +1014,7 @@
     }
 
     // Fetch initial data
-    fetch(`http://${SERVER_URL}/api/readings?limit=15`)
+    fetch(`${httpProtocol}//${SERVER_URL}/api/readings?limit=15`)
       .then(res => res.json())
       .then(readings => {
         console.log('Fetched initial readings:', readings.length);
@@ -1024,7 +1027,7 @@
       .catch(err => console.log('Could not fetch initial data:', err));
 
     // Fetch initial alerts
-    fetch(`http://${SERVER_URL}/api/alerts?limit=10`)
+    fetch(`${httpProtocol}//${SERVER_URL}/api/alerts?limit=10`)
       .then(res => res.json())
       .then(alerts => {
         console.log('Fetched initial alerts:', alerts.length);
