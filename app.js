@@ -1018,7 +1018,7 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// === GLOBAL EXPORTS ===
+// === GLOBAL EXPORTS ==
 window.setTheme = setTheme;
 window.toggleThemeMenu = toggleThemeMenu;
 window.toggleSound = toggleSound;
