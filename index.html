@@ -1,5 +1,6 @@
+<!-- index.html (Updated - Environment card removed, Rain Level trend card added for consistency) -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -63,8 +64,9 @@
   </div>
 
   <div class="dashboard">
-    <!-- Header -->
+    <!-- Header (unchanged) -->
     <header class="header">
+      <!-- ... (exact same header code as before) ... -->
       <div class="header-left">
         <div class="logo-mark">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -119,8 +121,8 @@
 
     <!-- Main Grid -->
     <main class="main-grid">
-      <!-- Row 1: Overview Cards -->
-      <div class="card card-lg" id="uvCard">
+      <!-- UV Index Card (unchanged) -->
+      <div class="card card-lg clickable" id="uvCard" onclick="showGraph('UV', 'UV Index', '', '☀️')">
         <div class="card-header">
           <span class="card-title">UV Index</span>
           <span class="card-badge" id="uvBadge">Moderate</span>
@@ -138,48 +140,12 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="card card-metrics">
-        <div class="card-header">
-          <span class="card-title">Environment</span>
-        </div>
-        <div class="metrics-grid">
-          <div class="metric-box clickable" onclick="showGraph('TP', 'Temperature', '°C', '🌡️')">
-            <span class="metric-label">Temperature</span>
-            <div class="metric-value-row">
-              <span class="metric-value" id="tempValue">--</span>
-              <span class="metric-unit">°C</span>
-            </div>
-            <div class="metric-bar" id="tempBar"></div>
-          </div>
-          <div class="metric-box clickable" onclick="showGraph('HM', 'Humidity', '%', '💧')">
-            <span class="metric-label">Humidity</span>
-            <div class="metric-value-row">
-              <span class="metric-value" id="humValue">--</span>
-              <span class="metric-unit">%</span>
-            </div>
-            <div class="metric-bar" id="humBar"></div>
-          </div>
-          <div class="metric-box clickable" onclick="showGraph('RN', 'Rain Level', '%', '🌧️')">
-            <span class="metric-label">Rain Level</span>
-            <div class="metric-value-row">
-              <span class="metric-value" id="rainValue">--</span>
-              <span class="metric-unit">%</span>
-            </div>
-            <div class="metric-bar" id="rainBar"></div>
-          </div>
-          <div class="metric-box clickable" onclick="showGraph('MO', 'Soil Moisture', '%', '🌿')">
-            <span class="metric-label">Soil Moisture</span>
-            <div class="metric-value-row">
-              <span class="metric-value" id="moistValue">--</span>
-              <span class="metric-unit">%</span>
-            </div>
-            <div class="metric-bar" id="moistBar"></div>
-          </div>
+        <div class="sparkline-container">
+          <canvas id="uvSparkline"></canvas>
         </div>
       </div>
 
+      <!-- Heat Index (unchanged) -->
       <div class="card card-lg">
         <div class="card-header">
           <span class="card-title">Heat Index</span>
@@ -214,7 +180,7 @@
         </div>
       </div>
 
-      <!-- Row 2: Trend Cards with Sparklines -->
+      <!-- Trend Cards (Temperature, Humidity, Soil Moisture, Rain Level) -->
       <div class="card card-trend clickable" onclick="showGraph('TP', 'Temperature', '°C', '🌡️')">
         <div class="card-header">
           <span class="card-title">Temperature</span>
@@ -257,7 +223,22 @@
         </div>
       </div>
 
-      <!-- Row 3: Pump Control & Alerts -->
+      <!-- New: Rain Level Trend Card (added so Rain data is not lost) -->
+      <div class="card card-trend clickable" onclick="showGraph('RN', 'Rain Level', '%', '🌧️')">
+        <div class="card-header">
+          <span class="card-title">Rain Level</span>
+          <span class="card-subtitle">Trend</span>
+        </div>
+        <div class="trend-value">
+          <span id="rainTrendValue">--</span>
+          <span class="trend-unit">%</span>
+        </div>
+        <div class="sparkline-container">
+          <canvas id="rainSparkline"></canvas>
+        </div>
+      </div>
+
+      <!-- Pump, Alerts, History (unchanged) -->
       <div class="card card-pump" id="pumpCard">
         <div class="card-header">
           <span class="card-title">Irrigation System</span>
@@ -315,7 +296,7 @@
       </div>
     </main>
 
-    <!-- Footer -->
+    <!-- Footer (unchanged) -->
     <footer class="footer">
       <div class="footer-left">
         <span class="footer-brand">AgriSense v2.0</span>

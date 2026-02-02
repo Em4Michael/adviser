@@ -1,3 +1,4 @@
+/* styles.css */
 /* ============================================
    AGRISENSE DASHBOARD - VERKADA-INSPIRED DESIGN
    Clean, professional monitoring interface
@@ -5,7 +6,6 @@
 
 /* === CSS Variables & Themes === */
 :root {
-  /* Dark Theme (Default) */
   --bg-primary: #0d1117;
   --bg-secondary: #161b22;
   --bg-card: #1c2128;
@@ -422,10 +422,11 @@ body {
 }
 
 .gauge-container {
-  flex: 1;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 16px;
 }
 
 .circular-gauge {
@@ -853,8 +854,9 @@ body {
 
 .history-table-wrapper {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   max-height: 200px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .history-table {
@@ -1252,6 +1254,76 @@ body {
   
   .clock {
     display: none;
+  }
+
+  /* Smaller gauges on mobile */
+  .circular-gauge {
+    width: 140px !important;
+    height: 140px !important;
+  }
+  .circular-gauge svg {
+    width: 140px !important;
+    height: 140px !important;
+  }
+  .gauge-number {
+    font-size: 2.4rem !important;
+  }
+  .gauge-label {
+    font-size: 0.75rem;
+  }
+
+  .semicircle-gauge {
+    width: 160px;
+  }
+  .semicircle-value span:first-child {
+    font-size: 1.8rem;
+  }
+
+  .pump-visual {
+    width: 70px;
+    height: 70px;
+  }
+  .pump-icon {
+    font-size: 1.6rem;
+  }
+
+  .sparkline-container {
+    min-height: 60px;
+  }
+
+  /* Smaller table text on mobile */
+  .history-table {
+    font-size: 0.75rem;
+  }
+  .history-table th,
+  .history-table td {
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    width: calc(100% - 24px);
+    max-width: none;
+    border-radius: var(--radius-lg);
+    max-height: 95vh;
+  }
+  .modal-body {
+    padding: 16px;
+  }
+  .time-range-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  .range-btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    min-width: auto;
+    flex: 1;
+  }
+  .chart-wrapper {
+    padding: 12px;
   }
 }
 

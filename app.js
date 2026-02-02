@@ -1,3 +1,4 @@
+// app.js
 // ============================================
 // AGRISENSE DASHBOARD - JAVASCRIPT
 // Real-time WebSocket + Live Graph Updates
@@ -25,12 +26,16 @@ let mainChart = null;
 let tempSparkline = null;
 let humSparkline = null;
 let moistSparkline = null;
+let uvSparkline = null;
+let rainSparkline = null;
 
 // Sparkline data buffers
 let sparklineData = {
   TP: [],
   HM: [],
-  MO: []
+  MO: [],
+  UV: [],
+  RN: []
 };
 const MAX_SPARKLINE_POINTS = 20;
 
@@ -108,22 +113,18 @@ function setTheme(themeName, save = true) {
     localStorage.setItem('agrisense-theme', themeName);
   }
   
-  // Update dropdown
   const icons = { dark: '🌙', light: '☀️', midnight: '🌌', forest: '🌲', ocean: '🌊' };
   const names = { dark: 'Dark', light: 'Light', midnight: 'Midnight', forest: 'Forest', ocean: 'Ocean' };
   
   document.getElementById('themeIcon').textContent = icons[themeName] || '🌙';
   document.getElementById('themeName').textContent = names[themeName] || 'Dark';
   
-  // Update active state
   document.querySelectorAll('.theme-option').forEach(opt => {
     opt.classList.toggle('active', opt.dataset.theme === themeName);
   });
   
-  // Close menu
   document.getElementById('themeMenu').classList.remove('active');
   
-  // Update charts
   updateChartsTheme();
 }
 
@@ -146,8 +147,7 @@ function getChartColors() {
 function updateChartsTheme() {
   const colors = getChartColors();
   
-  // Update sparklines
-  [tempSparkline, humSparkline, moistSparkline].forEach(chart => {
+  [tempSparkline, humSparkline, moistSparkline, uvSparkline, rainSparkline].forEach(chart => {
     if (chart) {
       chart.data.datasets[0].borderColor = colors.primary;
       chart.data.datasets[0].backgroundColor = hexToRgba(colors.primary, 0.1);
@@ -155,7 +155,6 @@ function updateChartsTheme() {
     }
   });
   
-  // Update main chart
   if (mainChart) {
     mainChart.data.datasets[0].borderColor = colors.primary;
     mainChart.data.datasets[0].backgroundColor = hexToRgba(colors.primary, 0.1);
@@ -191,13 +190,11 @@ function toggleSound() {
   saveSoundState();
   updateSoundUI();
   
-  // Play a test sound when enabling
   if (soundEnabled) {
     playNotificationSound();
   }
 }
 
-// Initialize audio context on first user interaction
 function getAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -212,13 +209,11 @@ function playNotificationSound() {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     
-    // Create a pleasant two-tone notification
     const osc1 = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
     const gainNode = ctx.createGain();
     const filter = ctx.createBiquadFilter();
     
-    // Setup filter for warmer sound
     filter.type = 'lowpass';
     filter.frequency.value = 2000;
     
@@ -227,13 +222,11 @@ function playNotificationSound() {
     filter.connect(gainNode);
     gainNode.connect(ctx.destination);
     
-    // Pleasant chord (C and E)
-    osc1.frequency.value = 523.25; // C5
-    osc2.frequency.value = 659.25; // E5
+    osc1.frequency.value = 523.25;
+    osc2.frequency.value = 659.25;
     osc1.type = 'sine';
     osc2.type = 'sine';
     
-    // Smooth envelope
     gainNode.gain.setValueAtTime(0, now);
     gainNode.gain.linearRampToValueAtTime(0.15, now + 0.05);
     gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
@@ -255,10 +248,8 @@ function playAlertSound(type) {
     const now = ctx.currentTime;
     
     if (type === 'uv_high') {
-      // Warning sound - descending urgent tones
       playWarningSound(ctx, now);
     } else {
-      // Success sound - ascending pleasant tones
       playSuccessSound(ctx, now);
     }
   } catch (e) {
@@ -267,7 +258,7 @@ function playAlertSound(type) {
 }
 
 function playWarningSound(ctx, now) {
-  const frequencies = [880, 698.46, 587.33]; // A5, F5, D5 - descending
+  const frequencies = [880, 698.46, 587.33];
   const duration = 0.15;
   
   frequencies.forEach((freq, i) => {
@@ -296,7 +287,7 @@ function playWarningSound(ctx, now) {
 }
 
 function playSuccessSound(ctx, now) {
-  const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 - ascending major chord
+  const frequencies = [523.25, 659.25, 783.99];
   const duration = 0.12;
   
   frequencies.forEach((freq, i) => {
@@ -363,7 +354,6 @@ function connect() {
         updateDashboard(msg.data);
         addToHistory(msg.data);
         updateSparklineData(msg.data);
-        // Add to readings cache
         addToReadingsCache(msg.data);
       } else if (msg.type === 'alert') {
         showAlertToast(msg.data);
@@ -385,7 +375,6 @@ function addToReadingsCache(data) {
   };
   allReadingsCache.push(reading);
   
-  // Keep last 500 readings in cache
   if (allReadingsCache.length > 500) {
     allReadingsCache.shift();
   }
@@ -394,33 +383,29 @@ function addToReadingsCache(data) {
 // === FETCH INITIAL DATA ===
 async function fetchInitialData() {
   try {
-    // Fetch more readings for graph data
     const readingsRes = await fetch(`${apiUrl}/api/readings?limit=200`);
     const readings = await readingsRes.json();
     
     if (Array.isArray(readings) && readings.length > 0) {
-      // Store all readings in cache (reversed to chronological order)
       allReadingsCache = readings.reverse();
       
-      // Use last 15 for history display
       historyData = readings.slice(-MAX_HISTORY).reverse();
       renderHistory();
       
-      // Update dashboard with latest
       updateDashboard(readings[readings.length - 1]);
       
-      // Initialize sparkline data
       readings.slice(-MAX_SPARKLINE_POINTS).forEach(r => {
         if (r.TP !== undefined) addToSparklineBuffer('TP', r.TP);
         if (r.HM !== undefined) addToSparklineBuffer('HM', r.HM);
         if (r.MO !== undefined) addToSparklineBuffer('MO', r.MO);
+        if (r.UV !== undefined) addToSparklineBuffer('UV', r.UV);
+        if (r.RN !== undefined) addToSparklineBuffer('RN', r.RN);
       });
       updateAllSparklines();
       
       console.log(`📊 Loaded ${readings.length} readings into cache`);
     }
     
-    // Fetch alerts
     const alertsRes = await fetch(`${apiUrl}/api/alerts?limit=10`);
     const alerts = await alertsRes.json();
     
@@ -434,24 +419,15 @@ async function fetchInitialData() {
 
 // === DASHBOARD UPDATES ===
 function updateDashboard(data) {
-  // UV Index Gauge
   updateUVGauge(data.UV);
-  
-  // Environment metrics
-  updateMetric('temp', data.TP, 60, getStatusForTemp);
-  updateMetric('hum', data.HM, 100, getStatusForHum);
-  updateMetric('rain', data.RN, 100, getStatusForRain);
-  updateMetric('moist', data.MO, 100, getStatusForMoist);
-  
-  // Heat Index Gauge
   updateHeatIndexGauge(data.HI);
   
   // Trend values
   updateTrendValue('tempTrendValue', data.TP);
   updateTrendValue('humTrendValue', data.HM);
   updateTrendValue('moistTrendValue', data.MO);
+  updateTrendValue('rainTrendValue', data.RN);
   
-  // Pump status
   updatePumpStatus(data.Pump);
 }
 
@@ -507,8 +483,6 @@ function updateHeatIndexGauge(hi) {
   valueEl.classList.add('updating');
   setTimeout(() => valueEl.classList.remove('updating'), 500);
   
-  // Calculate needle rotation (0 = -90deg, 50 = 0deg, 100 = 90deg)
-  // Assuming range 20-50°C maps to the gauge
   const minHI = 20, maxHI = 50;
   const normalizedHI = Math.max(minHI, Math.min(maxHI, hi));
   const percentage = (normalizedHI - minHI) / (maxHI - minHI);
@@ -517,57 +491,12 @@ function updateHeatIndexGauge(hi) {
   needle.style.transform = `rotate(${angle}deg)`;
 }
 
-function updateMetric(prefix, value, max, statusFn) {
-  if (value === undefined || value === null) return;
-  
-  const valueEl = document.getElementById(`${prefix}Value`);
-  const barEl = document.getElementById(`${prefix}Bar`);
-  
-  valueEl.textContent = typeof value === 'number' ? value.toFixed(1) : value;
-  valueEl.classList.add('updating');
-  setTimeout(() => valueEl.classList.remove('updating'), 500);
-  
-  const percentage = Math.min((value / max) * 100, 100);
-  const { color } = statusFn(value);
-  
-  barEl.style.setProperty('--bar-width', `${percentage}%`);
-  barEl.style.setProperty('--bar-color', color);
-}
-
 function updateTrendValue(id, value) {
   if (value === undefined || value === null) return;
   const el = document.getElementById(id);
   el.textContent = typeof value === 'number' ? value.toFixed(1) : value;
   el.classList.add('updating');
   setTimeout(() => el.classList.remove('updating'), 500);
-}
-
-function getStatusForTemp(v) {
-  if (v <= 20) return { status: 'Cool', color: '#58a6ff' };
-  if (v <= 30) return { status: 'Optimal', color: '#3fb950' };
-  if (v <= 35) return { status: 'Warm', color: '#d29922' };
-  return { status: 'Hot', color: '#f85149' };
-}
-
-function getStatusForHum(v) {
-  if (v <= 30) return { status: 'Dry', color: '#d29922' };
-  if (v <= 60) return { status: 'Optimal', color: '#3fb950' };
-  if (v <= 80) return { status: 'Humid', color: '#d29922' };
-  return { status: 'Very Humid', color: '#f85149' };
-}
-
-function getStatusForRain(v) {
-  if (v <= 20) return { status: 'Dry', color: '#3fb950' };
-  if (v <= 50) return { status: 'Light', color: '#58a6ff' };
-  if (v <= 80) return { status: 'Raining', color: '#d29922' };
-  return { status: 'Heavy', color: '#f85149' };
-}
-
-function getStatusForMoist(v) {
-  if (v <= 30) return { status: 'Dry', color: '#f85149' };
-  if (v <= 50) return { status: 'Low', color: '#d29922' };
-  if (v <= 70) return { status: 'Optimal', color: '#3fb950' };
-  return { status: 'Wet', color: '#58a6ff' };
 }
 
 function updatePumpStatus(pumpOn) {
@@ -626,6 +555,8 @@ function initSparklines() {
   tempSparkline = config('tempSparkline');
   humSparkline = config('humSparkline');
   moistSparkline = config('moistSparkline');
+  uvSparkline = config('uvSparkline');
+  rainSparkline = config('rainSparkline');
 }
 
 function addToSparklineBuffer(sensor, value) {
@@ -640,6 +571,8 @@ function updateSparklineData(data) {
   if (data.TP !== undefined) addToSparklineBuffer('TP', data.TP);
   if (data.HM !== undefined) addToSparklineBuffer('HM', data.HM);
   if (data.MO !== undefined) addToSparklineBuffer('MO', data.MO);
+  if (data.UV !== undefined) addToSparklineBuffer('UV', data.UV);
+  if (data.RN !== undefined) addToSparklineBuffer('RN', data.RN);
   
   updateAllSparklines();
 }
@@ -648,6 +581,8 @@ function updateAllSparklines() {
   updateSparklineChart(tempSparkline, sparklineData.TP);
   updateSparklineChart(humSparkline, sparklineData.HM);
   updateSparklineChart(moistSparkline, sparklineData.MO);
+  updateSparklineChart(uvSparkline, sparklineData.UV);
+  updateSparklineChart(rainSparkline, sparklineData.RN);
 }
 
 function updateSparklineChart(chart, data) {
@@ -745,7 +680,6 @@ function showGraph(sensor, title, unit, icon) {
   document.getElementById('modalSubtitle').textContent = currentTimeRange >= 168 ? 'Last 7 days' : `Last ${currentTimeRange} hour${currentTimeRange > 1 ? 's' : ''}`;
   document.getElementById('modalIcon').textContent = icon;
   
-  // Reset button states to match currentTimeRange
   document.querySelectorAll('.range-btn').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.hours) === currentTimeRange);
   });
@@ -765,17 +699,14 @@ function closeGraphModal() {
 }
 
 function changeTimeRange(hours) {
-  // Prevent re-loading if same range selected
   if (currentTimeRange === hours) return;
   
   currentTimeRange = hours;
   
-  // Update button states with animation
   document.querySelectorAll('.range-btn').forEach(btn => {
     const isActive = parseInt(btn.dataset.hours) === hours;
     btn.classList.toggle('active', isActive);
     
-    // Add a brief scale animation on the newly active button
     if (isActive) {
       btn.style.transform = 'scale(1.05)';
       setTimeout(() => {
@@ -784,7 +715,6 @@ function changeTimeRange(hours) {
     }
   });
   
-  // Update subtitle with animation
   const subtitle = document.getElementById('modalSubtitle');
   subtitle.style.opacity = '0.5';
   setTimeout(() => {
@@ -800,13 +730,11 @@ async function loadGraphData() {
   
   console.log(`Loading graph data for ${currentSensor.code}, last ${currentTimeRange} hours`);
   
-  // Show loading state
   const chartWrapper = document.querySelector('.chart-wrapper');
   chartWrapper.style.opacity = '0.5';
   chartWrapper.style.pointerEvents = 'none';
   
   try {
-    // First try the sensor-specific endpoint
     let data = [];
     
     try {
@@ -819,7 +747,6 @@ async function loadGraphData() {
       console.log('Sensor API failed, using cache:', apiErr);
     }
     
-    // If API returned empty or failed, use cache
     if (!data || data.length === 0) {
       console.log('Using local cache for graph data');
       data = getGraphDataFromCache(currentSensor.code, currentTimeRange);
@@ -837,7 +764,6 @@ async function loadGraphData() {
     console.error('Error loading graph data:', err);
     showNoDataMessage();
   } finally {
-    // Remove loading state
     chartWrapper.style.opacity = '1';
     chartWrapper.style.pointerEvents = '';
   }
@@ -847,13 +773,11 @@ function getGraphDataFromCache(sensorCode, hours) {
   const now = Date.now();
   const cutoff = now - (hours * 60 * 60 * 1000);
   
-  // Filter readings within time range
   const filtered = allReadingsCache.filter(r => {
     const ts = r.timestamp ? new Date(r.timestamp).getTime() : now;
     return ts >= cutoff;
   });
   
-  // Map to expected format
   return filtered.map(r => ({
     timestamp: r.timestamp || new Date().toISOString(),
     value: r[sensorCode],
@@ -897,7 +821,6 @@ function showNoDataMessage() {
     }
   });
   
-  // Clear stats
   document.getElementById('statCurrent').textContent = '--';
   document.getElementById('statAvg').textContent = '--';
   document.getElementById('statMin').textContent = '--';
@@ -1018,7 +941,7 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// === GLOBAL EXPORTS ==
+// === GLOBAL EXPORTS ===
 window.setTheme = setTheme;
 window.toggleThemeMenu = toggleThemeMenu;
 window.toggleSound = toggleSound;
