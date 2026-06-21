@@ -1,18 +1,28 @@
-<!-- index.html (Updated - Environment card removed, Rain Level trend card added for consistency) -->
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgriSense - Smart Agriculture Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AgriSense — Smart Agriculture Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <!-- Alert Toast Container -->
+
+  <!-- Page loader -->
+  <div class="page-loader" id="pageLoader">
+    <div class="loader-logo">
+      <div class="loader-ring"></div>
+      <div class="loader-ring loader-ring--2"></div>
+      <div class="loader-ring loader-ring--3"></div>
+      <span class="loader-text">AgriSense</span>
+    </div>
+  </div>
+
+  <!-- Alert toasts -->
   <div class="alert-container" id="alertContainer"></div>
-  
+
   <!-- Graph Modal -->
   <div class="modal-overlay" id="graphModal">
     <div class="modal-content">
@@ -24,288 +34,389 @@
             <p class="modal-subtitle" id="modalSubtitle">Last 24 hours</p>
           </div>
         </div>
-        <button class="modal-close" onclick="closeGraphModal()">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
+        <button class="modal-close" onclick="closeGraphModal()" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
       <div class="modal-body">
         <div class="time-range-bar">
-          <button class="range-btn" data-hours="1" onclick="changeTimeRange(1)">1H</button>
-          <button class="range-btn" data-hours="6" onclick="changeTimeRange(6)">6H</button>
-          <button class="range-btn" data-hours="12" onclick="changeTimeRange(12)">12H</button>
+          <button class="range-btn" data-hours="1"   onclick="changeTimeRange(1)">1H</button>
+          <button class="range-btn" data-hours="6"   onclick="changeTimeRange(6)">6H</button>
+          <button class="range-btn" data-hours="12"  onclick="changeTimeRange(12)">12H</button>
           <button class="range-btn active" data-hours="24" onclick="changeTimeRange(24)">24H</button>
           <button class="range-btn" data-hours="168" onclick="changeTimeRange(168)">7D</button>
         </div>
         <div class="chart-wrapper">
           <canvas id="sensorChart"></canvas>
         </div>
-        <div class="stats-row" id="chartStats">
-          <div class="stat-box">
-            <span class="stat-label">Current</span>
-            <span class="stat-value" id="statCurrent">--</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Average</span>
-            <span class="stat-value" id="statAvg">--</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Min</span>
-            <span class="stat-value" id="statMin">--</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Max</span>
-            <span class="stat-value" id="statMax">--</span>
-          </div>
+        <div class="stats-row">
+          <div class="stat-box"><span class="stat-label">Current</span><span class="stat-value" id="statCurrent">--</span></div>
+          <div class="stat-box"><span class="stat-label">Average</span><span class="stat-value" id="statAvg">--</span></div>
+          <div class="stat-box"><span class="stat-label">Min</span><span class="stat-value" id="statMin">--</span></div>
+          <div class="stat-box"><span class="stat-label">Max</span><span class="stat-value" id="statMax">--</span></div>
         </div>
       </div>
     </div>
   </div>
 
   <div class="dashboard">
-    <!-- Header (unchanged) -->
-    <header class="header">
-      <!-- ... (exact same header code as before) ... -->
+
+    <!-- ── HEADER ── -->
+    <header class="header" id="mainHeader">
       <div class="header-left">
         <div class="logo-mark">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
-            <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
-            <circle cx="16" cy="16" r="6" stroke="currentColor" stroke-width="1.5" opacity="0.7"/>
-            <circle cx="16" cy="16" r="2" fill="currentColor"/>
+          <svg width="30" height="30" viewBox="0 0 34 34" fill="none">
+            <circle cx="17" cy="17" r="15" stroke="var(--accent)" stroke-width="1.5" opacity=".25"/>
+            <circle cx="17" cy="17" r="10" stroke="var(--accent)" stroke-width="1.5" opacity=".55"/>
+            <circle cx="17" cy="17" r="5"  stroke="var(--accent)" stroke-width="1.5" opacity=".85"/>
+            <circle cx="17" cy="17" r="2"  fill="var(--accent)"/>
           </svg>
         </div>
         <div class="header-title">
           <h1>AgriSense</h1>
-          <span class="header-subtitle">Smart Agriculture Monitoring</span>
+          <span class="header-sub">Smart Agriculture Monitoring</span>
         </div>
       </div>
+
+      <div class="header-center">
+        <div class="live-pill" id="livePill">
+          <span class="live-dot"></span>
+          <span class="live-label">Live</span>
+        </div>
+      </div>
+
       <div class="header-right">
         <div class="theme-dropdown">
-          <button class="theme-toggle" id="themeToggle" onclick="toggleThemeMenu()">
-            <span class="theme-icon" id="themeIcon">🌙</span>
-            <span class="theme-name" id="themeName">Dark</span>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-            </svg>
+          <button class="icon-btn theme-toggle" onclick="toggleThemeMenu()" aria-label="Switch theme">
+            <span id="themeIcon">🌙</span>
+            <span id="themeName">Dark</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </button>
           <div class="theme-menu" id="themeMenu">
-            <button class="theme-option active" data-theme="dark" onclick="setTheme('dark')">
-              <span>🌙</span> Dark
-            </button>
-            <button class="theme-option" data-theme="light" onclick="setTheme('light')">
-              <span>☀️</span> Light
-            </button>
-            <button class="theme-option" data-theme="midnight" onclick="setTheme('midnight')">
-              <span>🌌</span> Midnight
-            </button>
-            <button class="theme-option" data-theme="forest" onclick="setTheme('forest')">
-              <span>🌲</span> Forest
-            </button>
-            <button class="theme-option" data-theme="ocean" onclick="setTheme('ocean')">
-              <span>🌊</span> Ocean
-            </button>
+            <button class="theme-opt active" data-theme="dark"     onclick="setTheme('dark')">🌙 Dark</button>
+            <button class="theme-opt"        data-theme="light"    onclick="setTheme('light')">☀️ Light</button>
+            <button class="theme-opt"        data-theme="midnight" onclick="setTheme('midnight')">🌌 Midnight</button>
+            <button class="theme-opt"        data-theme="forest"   onclick="setTheme('forest')">🌲 Forest</button>
+            <button class="theme-opt"        data-theme="ocean"    onclick="setTheme('ocean')">🌊 Ocean</button>
           </div>
         </div>
-        <button class="sound-btn" id="soundBtn" onclick="toggleSound()">
+        <button class="icon-btn" id="soundBtn" onclick="toggleSound()" aria-label="Toggle sound">
           <span id="soundIcon">🔇</span>
         </button>
-        <div class="connection-status" id="connectionStatus">
-          <span class="status-indicator"></span>
-          <span class="status-label">Connecting...</span>
+        <div class="conn-status" id="connStatus">
+          <span class="conn-dot" id="connDot"></span>
+          <span class="conn-label" id="connLabel">Connecting…</span>
         </div>
-        <div class="clock" id="clock">--:-- --</div>
+        <div class="clock-wrap">
+          <div class="clock" id="clock">--:--</div>
+          <div class="date"  id="dateDisplay">--- --, ----</div>
+        </div>
       </div>
     </header>
 
-    <!-- Main Grid -->
+    <!-- ── STAT STRIP ── -->
+    <section class="stat-strip" id="statStrip">
+      <div class="stat-card clickable stagger-1" onclick="showGraph('TP','Temperature','°C','🌡️')">
+        <div class="stat-icon" style="--ic:#ef4444">🌡️</div>
+        <div class="stat-body">
+          <div class="stat-num" style="color:#ef4444"><span id="sc-tp-val">--</span><span class="stat-unit">°C</span></div>
+          <div class="stat-meta">Temperature <span class="trend-badge" id="trend-tp"></span></div>
+        </div>
+        <canvas class="mini-spark" id="spark-tp" aria-hidden="true"></canvas>
+      </div>
+      <div class="stat-card clickable stagger-2" onclick="showGraph('HM','Humidity','%','💧')">
+        <div class="stat-icon" style="--ic:#3b82f6">💧</div>
+        <div class="stat-body">
+          <div class="stat-num" style="color:#3b82f6"><span id="sc-hm-val">--</span><span class="stat-unit">%</span></div>
+          <div class="stat-meta">Humidity <span class="trend-badge" id="trend-hm"></span></div>
+        </div>
+        <canvas class="mini-spark" id="spark-hm" aria-hidden="true"></canvas>
+      </div>
+      <div class="stat-card clickable stagger-3" onclick="showGraph('UV','UV Index','','☀️')">
+        <div class="stat-icon" style="--ic:#eab308">☀️</div>
+        <div class="stat-body">
+          <div class="stat-num" style="color:#eab308"><span id="sc-uv-val">--</span></div>
+          <div class="stat-meta">UV Index <span class="badge badge-y" id="uv-badge">--</span></div>
+        </div>
+        <canvas class="mini-spark" id="spark-uv" aria-hidden="true"></canvas>
+      </div>
+      <div class="stat-card clickable stagger-4" onclick="showGraph('MO','Soil Moisture','%','🌿')">
+        <div class="stat-icon" style="--ic:#22c55e">🌿</div>
+        <div class="stat-body">
+          <div class="stat-num" style="color:#22c55e"><span id="sc-mo-val">--</span><span class="stat-unit">%</span></div>
+          <div class="stat-meta">Soil Moisture <span class="trend-badge" id="trend-mo"></span></div>
+        </div>
+        <canvas class="mini-spark" id="spark-mo" aria-hidden="true"></canvas>
+      </div>
+      <div class="stat-card clickable stagger-5" onclick="showGraph('RN','Rain Level','%','🌧️')">
+        <div class="stat-icon" style="--ic:#9333ea">🌧️</div>
+        <div class="stat-body">
+          <div class="stat-num" style="color:#9333ea"><span id="sc-rn-val">--</span><span class="stat-unit">%</span></div>
+          <div class="stat-meta">Rain Level</div>
+        </div>
+        <canvas class="mini-spark" id="spark-rn" aria-hidden="true"></canvas>
+      </div>
+    </section>
+
+    <!-- ── MAIN GRID ── -->
     <main class="main-grid">
-      <!-- UV Index Card (unchanged) -->
-      <div class="card card-lg clickable" id="uvCard" onclick="showGraph('UV', 'UV Index', '', '☀️')">
+
+      <!-- UV Index -->
+      <div class="card card-uv clickable stagger-1" id="uvCard" onclick="showGraph('UV','UV Index','','☀️')">
         <div class="card-header">
           <span class="card-title">UV Index</span>
-          <span class="card-badge" id="uvBadge">Moderate</span>
+          <span class="badge" id="uvBadge">--</span>
         </div>
-        <div class="gauge-container">
-          <div class="circular-gauge" id="uvGauge">
-            <svg viewBox="0 0 200 200">
-              <circle class="gauge-bg" cx="100" cy="100" r="85"/>
-              <circle class="gauge-progress" cx="100" cy="100" r="85" id="uvProgress"/>
-              <circle class="gauge-inner" cx="100" cy="100" r="70"/>
-            </svg>
-            <div class="gauge-value">
-              <span class="gauge-number" id="uvValue">--</span>
-              <span class="gauge-label" id="uvLabel">UNKNOWN</span>
-            </div>
-          </div>
-        </div>
-        <div class="sparkline-container">
-          <canvas id="uvSparkline"></canvas>
-        </div>
-      </div>
-
-      <!-- Heat Index (unchanged) -->
-      <div class="card card-lg">
-        <div class="card-header">
-          <span class="card-title">Heat Index</span>
-          <span class="card-subtitle">Feels Like</span>
-        </div>
-        <div class="semicircle-gauge-container">
-          <div class="semicircle-gauge">
-            <svg viewBox="0 0 200 120">
+        <div class="uv-gauge-wrap">
+          <div class="uv-ring-container">
+            <svg class="uv-ring-svg" viewBox="0 0 160 160">
               <defs>
-                <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" style="stop-color:#22c55e"/>
-                  <stop offset="40%" style="stop-color:#eab308"/>
-                  <stop offset="70%" style="stop-color:#f97316"/>
-                  <stop offset="100%" style="stop-color:#ef4444"/>
+                <linearGradient id="uvGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stop-color="#22c55e"/>
+                  <stop offset="45%"  stop-color="#eab308"/>
+                  <stop offset="75%"  stop-color="#f97316"/>
+                  <stop offset="100%" stop-color="#ef4444"/>
                 </linearGradient>
               </defs>
-              <path class="gauge-arc-bg" d="M 20 100 A 80 80 0 0 1 180 100"/>
-              <path class="gauge-arc" d="M 20 100 A 80 80 0 0 1 180 100" id="hiArc"/>
-              <circle class="gauge-needle-dot" cx="100" cy="100" r="8"/>
-              <line class="gauge-needle" x1="100" y1="100" x2="100" y2="30" id="hiNeedle"/>
+              <circle class="ring-track" cx="80" cy="80" r="66"/>
+              <circle class="ring-fill"  cx="80" cy="80" r="66" id="uvRingFill"/>
             </svg>
-            <div class="semicircle-labels">
-              <span>Good</span>
-              <span>Fair</span>
-              <span>Bad</span>
-            </div>
-            <div class="semicircle-value">
-              <span id="hiValue">--</span>
-              <span class="semicircle-unit">°C</span>
+            <div class="uv-ring-center">
+              <span class="uv-val" id="uvValue">--</span>
+              <span class="uv-label" id="uvLabel">--</span>
             </div>
           </div>
         </div>
+        <div class="uv-hour-bars" id="uvHourBars" aria-hidden="true"></div>
+        <div class="uv-hour-labels"><span>6am</span><span>12pm</span><span>6pm</span></div>
       </div>
 
-      <!-- Trend Cards (Temperature, Humidity, Soil Moisture, Rain Level) -->
-      <div class="card card-trend clickable" onclick="showGraph('TP', 'Temperature', '°C', '🌡️')">
+      <!-- Heat Index -->
+      <div class="card card-hi stagger-2">
+        <div class="card-header">
+          <span class="card-title">Heat Index</span>
+          <span class="badge badge-o" id="hiBadge">--</span>
+        </div>
+        <div class="hi-value-row">
+          <span class="hi-big" id="hiValue">--</span>
+          <span class="hi-unit">°C feels like</span>
+        </div>
+        <div class="hi-gauge-wrap">
+          <svg class="hi-gauge-svg" viewBox="0 0 200 115">
+            <defs>
+              <linearGradient id="hiGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stop-color="#22c55e"/>
+                <stop offset="40%"  stop-color="#eab308"/>
+                <stop offset="70%"  stop-color="#f97316"/>
+                <stop offset="100%" stop-color="#ef4444"/>
+              </linearGradient>
+            </defs>
+            <path class="hi-track" d="M 20 100 A 80 80 0 0 1 180 100"/>
+            <path class="hi-fill"  d="M 20 100 A 80 80 0 0 1 180 100"/>
+            <line class="hi-needle" x1="100" y1="100" x2="100" y2="30" id="hiNeedle"/>
+            <circle class="hi-dot" cx="100" cy="100" r="7"/>
+            <text class="hi-tick-label" x="14"  y="114">Good</text>
+            <text class="hi-tick-label" x="100" y="16" text-anchor="middle">Caution</text>
+            <text class="hi-tick-label" x="186" y="114" text-anchor="end">Danger</text>
+          </svg>
+        </div>
+        <div class="hi-meta-row">
+          <div class="hi-meta-item">
+            <span class="hi-meta-label">Humidity adds</span>
+            <span class="hi-meta-val" id="hiHumAdd">--</span>
+          </div>
+          <div class="hi-meta-item">
+            <span class="hi-meta-label">Real temp</span>
+            <span class="hi-meta-val" id="hiRealTemp">--</span>
+          </div>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="hiProgress" style="background:var(--accent-orange)"></div></div>
+        </div>
+      </div>
+
+      <!-- Temperature -->
+      <div class="card card-temp clickable stagger-3" onclick="showGraph('TP','Temperature','°C','🌡️')">
         <div class="card-header">
           <span class="card-title">Temperature</span>
-          <span class="card-subtitle">Trend</span>
+          <span style="font-size:.68rem;color:var(--text-muted)">Last 24h</span>
         </div>
-        <div class="trend-value">
-          <span id="tempTrendValue">--</span>
-          <span class="trend-unit">°C</span>
+        <div class="big-val-row">
+          <span class="big-val" id="tempBig" style="color:#ef4444">--</span>
+          <span class="big-unit">°C</span>
         </div>
-        <div class="sparkline-container">
-          <canvas id="tempSparkline"></canvas>
-        </div>
-      </div>
-
-      <div class="card card-trend clickable" onclick="showGraph('HM', 'Humidity', '%', '💧')">
-        <div class="card-header">
-          <span class="card-title">Humidity</span>
-          <span class="card-subtitle">Trend</span>
-        </div>
-        <div class="trend-value">
-          <span id="humTrendValue">--</span>
-          <span class="trend-unit">%</span>
-        </div>
-        <div class="sparkline-container">
-          <canvas id="humSparkline"></canvas>
+        <div class="temp-trend-tag" id="tempTrendTag"></div>
+        <div class="sparkline-area"><canvas id="tempSparkline" aria-label="Temperature sparkline"></canvas></div>
+        <div class="trio-stats">
+          <div class="trio-stat"><span class="trio-label">Min</span><span class="trio-val" id="tempMin">--</span></div>
+          <div class="trio-stat"><span class="trio-label">Avg</span><span class="trio-val" id="tempAvg">--</span></div>
+          <div class="trio-stat"><span class="trio-label">Max</span><span class="trio-val" id="tempMax" style="color:#ef4444">--</span></div>
         </div>
       </div>
 
-      <div class="card card-trend clickable" onclick="showGraph('MO', 'Soil Moisture', '%', '🌿')">
+      <!-- Soil Moisture & Humidity -->
+      <div class="card card-moisture stagger-4">
         <div class="card-header">
-          <span class="card-title">Soil Moisture</span>
-          <span class="card-subtitle">Trend</span>
+          <span class="card-title">Moisture & Humidity</span>
         </div>
-        <div class="trend-value">
-          <span id="moistTrendValue">--</span>
-          <span class="trend-unit">%</span>
-        </div>
-        <div class="sparkline-container">
-          <canvas id="moistSparkline"></canvas>
-        </div>
-      </div>
-
-      <!-- New: Rain Level Trend Card (added so Rain data is not lost) -->
-      <div class="card card-trend clickable" onclick="showGraph('RN', 'Rain Level', '%', '🌧️')">
-        <div class="card-header">
-          <span class="card-title">Rain Level</span>
-          <span class="card-subtitle">Trend</span>
-        </div>
-        <div class="trend-value">
-          <span id="rainTrendValue">--</span>
-          <span class="trend-unit">%</span>
-        </div>
-        <div class="sparkline-container">
-          <canvas id="rainSparkline"></canvas>
-        </div>
-      </div>
-
-      <!-- Pump, Alerts, History (unchanged) -->
-      <div class="card card-pump" id="pumpCard">
-        <div class="card-header">
-          <span class="card-title">Irrigation System</span>
-        </div>
-        <div class="pump-display">
-          <div class="pump-visual" id="pumpVisual">
-            <div class="pump-ring"></div>
-            <div class="pump-icon">💧</div>
+        <div class="donut-pair">
+          <div class="donut-wrap">
+            <div class="donut-ring-wrap" onclick="showGraph('MO','Soil Moisture','%','🌿')">
+              <svg class="donut-svg" viewBox="0 0 100 100">
+                <circle class="donut-track" cx="50" cy="50" r="40"/>
+                <circle class="donut-fill"  cx="50" cy="50" r="40" id="soilDonut" style="stroke:#22c55e"/>
+              </svg>
+              <div class="donut-center">
+                <span class="donut-val" id="soilVal" style="color:#22c55e">--%</span>
+                <span class="donut-lbl">Soil</span>
+              </div>
+            </div>
+            <div class="donut-zone-bar">
+              <div class="zone-track"><div class="zone-fill" id="soilZone" style="background:#22c55e"></div></div>
+              <span class="zone-text">Target 40–70%</span>
+            </div>
           </div>
-          <div class="pump-info">
-            <span class="pump-status" id="pumpStatus">OFF</span>
-            <span class="pump-label" id="pumpLabel">System Idle</span>
+          <div class="donut-wrap">
+            <div class="donut-ring-wrap" onclick="showGraph('HM','Humidity','%','💧')">
+              <svg class="donut-svg" viewBox="0 0 100 100">
+                <circle class="donut-track" cx="50" cy="50" r="40"/>
+                <circle class="donut-fill"  cx="50" cy="50" r="40" id="humDonut" style="stroke:#3b82f6"/>
+              </svg>
+              <div class="donut-center">
+                <span class="donut-val" id="humVal" style="color:#3b82f6">--%</span>
+                <span class="donut-lbl">Humid</span>
+              </div>
+            </div>
+            <div class="donut-zone-bar">
+              <div class="zone-track"><div class="zone-fill" id="humZone" style="background:#3b82f6"></div></div>
+              <span class="zone-text">Target 60–80%</span>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="card card-alerts">
-        <div class="card-header">
-          <span class="card-title">Recent Alerts</span>
-          <span class="alert-count" id="alertCount">0</span>
-        </div>
-        <div class="alerts-list" id="alertsList">
-          <div class="empty-state">
-            <span class="empty-icon">🔔</span>
-            <span>No alerts</span>
+        <div class="heatmap-header">
+          <span class="card-title" style="font-size:.76rem">7-day soil moisture map</span>
+          <div class="hm-legend">
+            <span class="hm-swatch" style="background:rgba(239,68,68,.5)"></span>Dry&nbsp;
+            <span class="hm-swatch" style="background:rgba(234,179,8,.5)"></span>Low&nbsp;
+            <span class="hm-swatch" style="background:rgba(34,197,94,.6)"></span>Good
           </div>
         </div>
+        <div class="heatmap" id="heatmap" aria-label="7-day soil moisture heatmap"></div>
+        <div class="hm-day-labels">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
       </div>
 
-      <div class="card card-history">
+      <!-- Rain & Irrigation -->
+      <div class="card card-rain stagger-5">
+        <div class="card-header">
+          <span class="card-title">Rain & Irrigation</span>
+          <div class="pump-pill" id="pumpPill">
+            <span class="pump-dot" id="pumpDot"></span>
+            <span id="pumpLabel">Pump OFF</span>
+          </div>
+        </div>
+        <div class="rain-bars-wrap">
+          <div class="rain-bars" id="rainBars" aria-label="7-day rainfall bars"></div>
+          <div class="rain-bar-labels">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+        <div class="rain-stats-row">
+          <div class="rain-stat"><span class="rain-stat-num" id="rainTotal">--</span><span class="rain-stat-lbl">Total 7d</span></div>
+          <div class="rain-stat"><span class="rain-stat-num" id="pumpCycles">--</span><span class="rain-stat-lbl">Cycles</span></div>
+          <div class="rain-stat"><span class="rain-stat-num" id="nextCycle">18:30</span><span class="rain-stat-lbl">Next run</span></div>
+        </div>
+        <div class="rain-sparkline-area"><canvas id="rainSparkline" aria-label="Rain level sparkline"></canvas></div>
+      </div>
+
+      <!-- System Health -->
+      <div class="card card-health stagger-6">
+        <div class="card-header">
+          <span class="card-title">System Health</span>
+          <span class="badge badge-g">NOMINAL</span>
+        </div>
+        <div class="health-metrics" id="healthMetrics">
+          <div class="hm-row">
+            <span class="hm-label">Crop stress</span>
+            <div class="hm-bar-wrap"><div class="hm-bar-fill" style="--pct:22%;--col:#22c55e"></div></div>
+            <span class="hm-pct hm-good">Low</span>
+          </div>
+          <div class="hm-row">
+            <span class="hm-label">UV exposure</span>
+            <div class="hm-bar-wrap"><div class="hm-bar-fill" style="--pct:62%;--col:#eab308"></div></div>
+            <span class="hm-pct hm-warn">Medium</span>
+          </div>
+          <div class="hm-row">
+            <span class="hm-label">Irrigation eff.</span>
+            <div class="hm-bar-wrap"><div class="hm-bar-fill" style="--pct:87%;--col:#22c55e"></div></div>
+            <span class="hm-pct hm-good">87%</span>
+          </div>
+          <div class="hm-row">
+            <span class="hm-label">Heat stress</span>
+            <div class="hm-bar-wrap"><div class="hm-bar-fill" style="--pct:55%;--col:#f97316"></div></div>
+            <span class="hm-pct hm-warn">Moderate</span>
+          </div>
+        </div>
+        <div class="alerts-mini">
+          <div class="alert-mini-header">Recent alerts</div>
+          <div id="alertsList"></div>
+        </div>
+      </div>
+
+      <!-- Multi-sensor Chart -->
+      <div class="card card-multi stagger-7">
+        <div class="card-header">
+          <div>
+            <span class="card-title">Multi-sensor correlation</span>
+            <span class="card-sub">Last 24h</span>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-line" style="background:#ef4444"></span>Temp</span>
+            <span class="legend-item"><span class="legend-line" style="background:#3b82f6"></span>Humid</span>
+            <span class="legend-item"><span class="legend-line" style="background:#22c55e"></span>Soil</span>
+            <span class="legend-item"><span class="legend-line legend-dashed"></span>UV</span>
+          </div>
+        </div>
+        <div class="multi-chart-wrap">
+          <canvas id="multiChart" role="img" aria-label="Multi-sensor correlation chart over 24 hours"></canvas>
+        </div>
+        <div class="multi-x-labels">
+          <span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span>
+          <span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>Now</span>
+        </div>
+      </div>
+
+      <!-- Reading History -->
+      <div class="card card-history stagger-8">
         <div class="card-header">
           <span class="card-title">Reading History</span>
-          <span class="reading-count" id="readingCount">0</span>
+          <span class="badge badge-b" id="readingCount">0</span>
         </div>
-        <div class="history-table-wrapper">
-          <table class="history-table">
+        <div class="table-wrap">
+          <table class="data-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Temp</th>
-                <th>Hum</th>
-                <th>UV</th>
-                <th>Rain</th>
-                <th>Soil</th>
-                <th>Pump</th>
+                <th>Time</th><th>Temp</th><th>Humid</th><th>UV</th>
+                <th>Rain</th><th>Soil</th><th>Pump</th>
               </tr>
             </thead>
             <tbody id="historyBody">
-              <tr>
-                <td colspan="7" class="empty-cell">Waiting for data...</td>
-              </tr>
+              <tr><td colspan="7" class="empty-cell">Waiting for data…</td></tr>
             </tbody>
           </table>
         </div>
       </div>
+
     </main>
 
-    <!-- Footer (unchanged) -->
+    <!-- ── FOOTER ── -->
     <footer class="footer">
-      <div class="footer-left">
-        <span class="footer-brand">AgriSense v2.0</span>
-      </div>
-      <div class="footer-right">
-        <span class="date-display" id="dateDisplay">--/--/----</span>
-      </div>
+      <span class="footer-brand">AgriSense v2.2</span>
+      <span class="footer-date" id="footerDate">--</span>
     </footer>
-  </div>
+
+  </div><!-- .dashboard -->
 
   <script src="app.js"></script>
 </body>

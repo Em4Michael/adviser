@@ -1,950 +1,908 @@
-// app.js
-// ============================================
-// AGRISENSE DASHBOARD - JAVASCRIPT
-// Real-time WebSocket + Live Graph Updates
-// ============================================
+// ============================================================
+//  AGRISENSE v2.1 — APP.JS
+//  WebSocket + Live Graphs + Rich Animations
+// ============================================================
 
-// === CONFIGURATION ===
+// ── Configuration ──────────────────────────────────────────
 const SERVER_URL = 'adviser-server.onrender.com';
-const USE_SSL = true;
+const USE_SSL    = true;
 
-const wsProtocol = USE_SSL ? 'wss:' : 'ws:';
+const wsProtocol  = USE_SSL ? 'wss:' : 'ws:';
 const httpProtocol = USE_SSL ? 'https:' : 'http:';
-const wsUrl = `${wsProtocol}//${SERVER_URL}`;
+const wsUrl  = `${wsProtocol}//${SERVER_URL}`;
 const apiUrl = `${httpProtocol}//${SERVER_URL}`;
 
-// === STATE ===
+// ── State ───────────────────────────────────────────────────
 let ws = null;
 let reconnectAttempts = 0;
 let soundEnabled = false;
-let historyData = [];
-const MAX_HISTORY = 15;
-let audioContext = null;
-
-// Chart instances
-let mainChart = null;
-let tempSparkline = null;
-let humSparkline = null;
-let moistSparkline = null;
-let uvSparkline = null;
-let rainSparkline = null;
-
-// Sparkline data buffers
-let sparklineData = {
-  TP: [],
-  HM: [],
-  MO: [],
-  UV: [],
-  RN: []
-};
-const MAX_SPARKLINE_POINTS = 20;
-
-// Modal state
-let currentSensor = null;
-let currentTimeRange = 24;
-
-// All readings cache for graph
+let audioContext  = null;
+let historyData   = [];
+const MAX_HISTORY = 20;
 let allReadingsCache = [];
 
-// === INITIALIZATION ===
+// Chart instances
+let mainChart    = null;
+let tempSpark    = null;
+let humSpark     = null;
+let moistSpark   = null;
+let uvSpark      = null;
+let rainSpark    = null;
+let multiChart   = null;
+
+// Mini spark data buffers
+const sparkData = { TP:[], HM:[], MO:[], UV:[], RN:[] };
+const MAX_SPARK = 24;
+
+// Modal state
+let currentSensor    = null;
+let currentTimeRange = 24;
+
+// Prev readings for trend arrows
+let prevReadings = {};
+
+// ── Init ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🌱 AgriSense Dashboard Initializing...');
-  
+  showLoader();
   loadTheme();
   loadSoundState();
   initClock();
-  initSparklines();
+  buildHeatmap();
+  buildUVHourBars();
+  buildRainBars();
+  initMiniSparks();
+  initMultiChart();
+
+  // Staggered reveal after brief loader
+  setTimeout(() => {
+    hideLoader();
+    revealElements();
+  }, 1800);
+
   connect();
   fetchInitialData();
-  
-  // Event listeners
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeGraphModal();
-  });
-  
-  document.getElementById('graphModal').addEventListener('click', (e) => {
+
+  // Modal keyboard dismiss
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeGraphModal(); });
+  document.getElementById('graphModal').addEventListener('click', e => {
     if (e.target.id === 'graphModal') closeGraphModal();
   });
-  
-  // Close theme menu on outside click
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.theme-dropdown')) {
+  // Theme menu dismiss
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.theme-dropdown'))
       document.getElementById('themeMenu').classList.remove('active');
-    }
   });
-  
-  console.log('✅ Dashboard Ready!');
 });
 
-// === CLOCK ===
+// ── Loader ──────────────────────────────────────────────────
+function showLoader() {
+  document.getElementById('pageLoader').classList.remove('hidden');
+}
+function hideLoader() {
+  document.getElementById('pageLoader').classList.add('hidden');
+}
+
+// ── Stagger reveal ──────────────────────────────────────────
+function revealElements() {
+  const cards  = document.querySelectorAll('.card');
+  const stats  = document.querySelectorAll('.stat-card');
+  const header = document.getElementById('mainHeader');
+
+  header?.classList.add('visible');
+
+  stats.forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), 60 + i * 60);
+  });
+  cards.forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), 200 + i * 70);
+  });
+  // Heatmap cells
+  const cells = document.querySelectorAll('.hm-cell');
+  cells.forEach((c, i) => {
+    setTimeout(() => c.classList.add('visible'), 600 + i * 18);
+  });
+  // Health bars animate to actual widths
+  setTimeout(() => {
+    document.querySelectorAll('.hm-bar-fill').forEach(el => {
+      el.style.width = el.style.getPropertyValue('--pct') || '0%';
+    });
+  }, 800);
+}
+
+// ── Clock ────────────────────────────────────────────────────
 function initClock() {
-  updateClock();
-  setInterval(updateClock, 1000);
+  tick();
+  setInterval(tick, 1000);
 }
-
-function updateClock() {
+function tick() {
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    hour12: true 
-  });
-  const dateStr = now.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
-  
-  document.getElementById('clock').textContent = timeStr;
-  document.getElementById('dateDisplay').textContent = dateStr;
+  const t = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
+  const d = now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  const el = document.getElementById('clock');
+  if (el) el.textContent = t;
+  const de = document.getElementById('dateDisplay');
+  if (de) de.textContent = d;
+  const fd = document.getElementById('footerDate');
+  if (fd) fd.textContent = d;
 }
 
-// === THEME MANAGEMENT ===
+// ── Theme ────────────────────────────────────────────────────
 function loadTheme() {
-  const saved = localStorage.getItem('agrisense-theme') || 'dark';
-  setTheme(saved, false);
+  setTheme(localStorage.getItem('agrisense-theme') || 'dark', false);
 }
-
-function setTheme(themeName, save = true) {
-  document.documentElement.setAttribute('data-theme', themeName);
-  
-  if (save) {
-    localStorage.setItem('agrisense-theme', themeName);
-  }
-  
-  const icons = { dark: '🌙', light: '☀️', midnight: '🌌', forest: '🌲', ocean: '🌊' };
-  const names = { dark: 'Dark', light: 'Light', midnight: 'Midnight', forest: 'Forest', ocean: 'Ocean' };
-  
-  document.getElementById('themeIcon').textContent = icons[themeName] || '🌙';
-  document.getElementById('themeName').textContent = names[themeName] || 'Dark';
-  
-  document.querySelectorAll('.theme-option').forEach(opt => {
-    opt.classList.toggle('active', opt.dataset.theme === themeName);
-  });
-  
-  document.getElementById('themeMenu').classList.remove('active');
-  
+function setTheme(name, save = true) {
+  document.documentElement.setAttribute('data-theme', name);
+  if (save) localStorage.setItem('agrisense-theme', name);
+  const icons  = { dark:'🌙', light:'☀️', midnight:'🌌', forest:'🌲', ocean:'🌊' };
+  const labels = { dark:'Dark', light:'Light', midnight:'Midnight', forest:'Forest', ocean:'Ocean' };
+  const ti = document.getElementById('themeIcon');
+  const tn = document.getElementById('themeName');
+  if (ti) ti.textContent = icons[name]  || '🌙';
+  if (tn) tn.textContent = labels[name] || 'Dark';
+  document.querySelectorAll('.theme-opt').forEach(o => o.classList.toggle('active', o.dataset.theme === name));
+  document.getElementById('themeMenu')?.classList.remove('active');
   updateChartsTheme();
 }
-
 function toggleThemeMenu() {
-  document.getElementById('themeMenu').classList.toggle('active');
+  document.getElementById('themeMenu')?.classList.toggle('active');
 }
 
 function getChartColors() {
-  const style = getComputedStyle(document.documentElement);
+  const s = getComputedStyle(document.documentElement);
   return {
-    primary: style.getPropertyValue('--accent-green').trim() || '#3fb950',
-    secondary: style.getPropertyValue('--accent-blue').trim() || '#58a6ff',
-    text: style.getPropertyValue('--text-primary').trim() || '#e6edf3',
-    textMuted: style.getPropertyValue('--text-muted').trim() || '#484f58',
-    grid: style.getPropertyValue('--border-color').trim() || 'rgba(240, 246, 252, 0.1)',
-    bg: style.getPropertyValue('--bg-secondary').trim() || '#161b22'
+    primary:   s.getPropertyValue('--accent').trim()          || '#22c55e',
+    text:      s.getPropertyValue('--text-primary').trim()    || '#e8edf2',
+    muted:     s.getPropertyValue('--text-muted').trim()      || '#4a5560',
+    grid:      s.getPropertyValue('--border').trim()          || 'rgba(255,255,255,.07)',
+    bg:        s.getPropertyValue('--bg-card').trim()         || '#161b21',
+    surface:   s.getPropertyValue('--bg-surface').trim()      || '#111519',
   };
 }
-
 function updateChartsTheme() {
-  const colors = getChartColors();
-  
-  [tempSparkline, humSparkline, moistSparkline, uvSparkline, rainSparkline].forEach(chart => {
-    if (chart) {
-      chart.data.datasets[0].borderColor = colors.primary;
-      chart.data.datasets[0].backgroundColor = hexToRgba(colors.primary, 0.1);
-      chart.update('none');
-    }
+  const c = getChartColors();
+  [tempSpark, humSpark, moistSpark, uvSpark, rainSpark].forEach(ch => {
+    if (!ch) return;
+    ch.data.datasets[0].borderColor = c.primary;
+    ch.data.datasets[0].backgroundColor = hexToRgba(c.primary, .08);
+    ch.update('none');
   });
-  
-  if (mainChart) {
-    mainChart.data.datasets[0].borderColor = colors.primary;
-    mainChart.data.datasets[0].backgroundColor = hexToRgba(colors.primary, 0.1);
-    mainChart.options.scales.x.grid.color = colors.grid;
-    mainChart.options.scales.y.grid.color = colors.grid;
-    mainChart.options.scales.x.ticks.color = colors.textMuted;
-    mainChart.options.scales.y.ticks.color = colors.textMuted;
-    mainChart.update();
+  if (multiChart) {
+    multiChart.options.scales.x.grid.color = c.grid;
+    multiChart.options.scales.y.grid.color = c.grid;
+    multiChart.update('none');
   }
 }
 
-// === SOUND MANAGEMENT ===
+// ── Sound ────────────────────────────────────────────────────
 function loadSoundState() {
-  const saved = localStorage.getItem('agrisense-sound');
-  soundEnabled = saved === 'true';
+  soundEnabled = localStorage.getItem('agrisense-sound') === 'true';
   updateSoundUI();
 }
-
-function saveSoundState() {
-  localStorage.setItem('agrisense-sound', soundEnabled.toString());
-}
-
 function updateSoundUI() {
-  const btn = document.getElementById('soundBtn');
+  const btn  = document.getElementById('soundBtn');
   const icon = document.getElementById('soundIcon');
-  
-  btn.classList.toggle('enabled', soundEnabled);
-  icon.textContent = soundEnabled ? '🔊' : '🔇';
+  btn?.classList.toggle('enabled', soundEnabled);
+  if (icon) icon.textContent = soundEnabled ? '🔊' : '🔇';
 }
-
 function toggleSound() {
   soundEnabled = !soundEnabled;
-  saveSoundState();
+  localStorage.setItem('agrisense-sound', soundEnabled);
   updateSoundUI();
-  
-  if (soundEnabled) {
-    playNotificationSound();
-  }
+  if (soundEnabled) playNotificationSound();
 }
-
-function getAudioContext() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
+function getAudio() {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
   return audioContext;
 }
-
 function playNotificationSound() {
   if (!soundEnabled) return;
-  
   try {
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-    
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    
-    filter.type = 'lowpass';
-    filter.frequency.value = 2000;
-    
-    osc1.connect(filter);
-    osc2.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    osc1.frequency.value = 523.25;
-    osc2.frequency.value = 659.25;
-    osc1.type = 'sine';
-    osc2.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.15, now + 0.05);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-    
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.4);
-    osc2.stop(now + 0.4);
-  } catch (e) {
-    console.log('Audio not supported:', e);
-  }
+    const ctx = getAudio(); const now = ctx.currentTime;
+    [523.25, 659.25].forEach(freq => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = freq; o.type = 'sine';
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(.12, now + .05);
+      g.gain.exponentialRampToValueAtTime(.001, now + .4);
+      o.start(now); o.stop(now + .4);
+    });
+  } catch(e) {}
 }
-
 function playAlertSound(type) {
   if (!soundEnabled) return;
-  
   try {
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-    
-    if (type === 'uv_high') {
-      playWarningSound(ctx, now);
-    } else {
-      playSuccessSound(ctx, now);
-    }
-  } catch (e) {
-    console.log('Audio not supported:', e);
-  }
+    const ctx = getAudio(); const now = ctx.currentTime;
+    const freqs = type === 'uv_high' ? [880, 698, 587] : [523, 659, 784];
+    freqs.forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f;
+      o.type = type === 'uv_high' ? 'triangle' : 'sine';
+      const t = now + i * .13;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(.15, t + .02);
+      g.gain.exponentialRampToValueAtTime(.001, t + .13);
+      o.start(t); o.stop(t + .2);
+    });
+  } catch(e) {}
 }
 
-function playWarningSound(ctx, now) {
-  const frequencies = [880, 698.46, 587.33];
-  const duration = 0.15;
-  
-  frequencies.forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    
-    filter.type = 'lowpass';
-    filter.frequency.value = 3000;
-    
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    
-    osc.frequency.value = freq;
-    osc.type = 'triangle';
-    
-    const startTime = now + (i * duration);
-    gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-    
-    osc.start(startTime);
-    osc.stop(startTime + duration);
-  });
-}
-
-function playSuccessSound(ctx, now) {
-  const frequencies = [523.25, 659.25, 783.99];
-  const duration = 0.12;
-  
-  frequencies.forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    
-    filter.type = 'lowpass';
-    filter.frequency.value = 2500;
-    
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    
-    const startTime = now + (i * duration);
-    gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(0.15, startTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration + 0.1);
-    
-    osc.start(startTime);
-    osc.stop(startTime + duration + 0.15);
-  });
-}
-
-// === WEBSOCKET ===
+// ── WebSocket ────────────────────────────────────────────────
 function connect() {
-  console.log('Connecting to:', wsUrl);
   ws = new WebSocket(wsUrl);
-  
-  const statusIndicator = document.querySelector('.status-indicator');
-  const statusLabel = document.querySelector('.status-label');
-  
+  const dot   = document.getElementById('connDot');
+  const label = document.getElementById('connLabel');
+
   ws.onopen = () => {
-    console.log('✅ WebSocket connected');
-    statusIndicator.classList.add('connected');
-    statusLabel.textContent = 'Connected';
+    dot?.classList.add('connected');
+    if (label) label.textContent = 'Connected';
     reconnectAttempts = 0;
-    ws.send(JSON.stringify({ type: 'dashboard' }));
+    ws.send(JSON.stringify({ type:'dashboard' }));
   };
-  
   ws.onclose = () => {
-    console.log('🔌 WebSocket disconnected');
-    statusIndicator.classList.remove('connected');
-    statusLabel.textContent = 'Disconnected';
-    
+    dot?.classList.remove('connected');
+    if (label) label.textContent = 'Reconnecting…';
     reconnectAttempts++;
-    const delay = Math.min(1000 * reconnectAttempts, 10000);
-    setTimeout(connect, delay);
+    setTimeout(connect, Math.min(1000 * reconnectAttempts, 10000));
   };
-  
-  ws.onerror = (err) => {
-    console.error('❌ WebSocket error:', err);
-    statusLabel.textContent = 'Error';
-  };
-  
-  ws.onmessage = (event) => {
+  ws.onerror = () => { if (label) label.textContent = 'Error'; };
+  ws.onmessage = ({ data }) => {
     try {
-      const msg = JSON.parse(event.data);
-      
+      const msg = JSON.parse(data);
       if (msg.type === 'sensor') {
         updateDashboard(msg.data);
         addToHistory(msg.data);
-        updateSparklineData(msg.data);
-        addToReadingsCache(msg.data);
+        addToSparkBuffers(msg.data);
+        updateMiniSparks();
+        cacheReading(msg.data);
+        updateMultiChart();
       } else if (msg.type === 'alert') {
-        showAlertToast(msg.data);
+        showToast(msg.data);
         addAlertToList(msg.data);
       } else if (msg.type === 'recent_alerts') {
-        msg.data.reverse().forEach(alert => addAlertToList(alert));
+        msg.data.slice().reverse().forEach(a => addAlertToList(a));
       }
-    } catch (err) {
-      console.error('Parse error:', err);
-    }
+    } catch(e) { console.error(e); }
   };
 }
 
-// === READINGS CACHE FOR GRAPHS ===
-function addToReadingsCache(data) {
-  const reading = {
-    ...data,
-    timestamp: data.timestamp || new Date().toISOString()
-  };
-  allReadingsCache.push(reading);
-  
-  if (allReadingsCache.length > 500) {
-    allReadingsCache.shift();
-  }
-}
-
-// === FETCH INITIAL DATA ===
+// ── Initial fetch ─────────────────────────────────────────────
 async function fetchInitialData() {
   try {
-    const readingsRes = await fetch(`${apiUrl}/api/readings?limit=200`);
-    const readings = await readingsRes.json();
-    
+    const res = await fetch(`${apiUrl}/api/readings?limit=200`);
+    const readings = await res.json();
     if (Array.isArray(readings) && readings.length > 0) {
-      allReadingsCache = readings.reverse();
-      
-      historyData = readings.slice(-MAX_HISTORY).reverse();
+      allReadingsCache = readings.slice().reverse();
+      historyData = allReadingsCache.slice(-MAX_HISTORY).slice().reverse();
       renderHistory();
-      
-      updateDashboard(readings[readings.length - 1]);
-      
-      readings.slice(-MAX_SPARKLINE_POINTS).forEach(r => {
-        if (r.TP !== undefined) addToSparklineBuffer('TP', r.TP);
-        if (r.HM !== undefined) addToSparklineBuffer('HM', r.HM);
-        if (r.MO !== undefined) addToSparklineBuffer('MO', r.MO);
-        if (r.UV !== undefined) addToSparklineBuffer('UV', r.UV);
-        if (r.RN !== undefined) addToSparklineBuffer('RN', r.RN);
+      const last = allReadingsCache[allReadingsCache.length - 1];
+      updateDashboard(last);
+      allReadingsCache.slice(-MAX_SPARK).forEach(r => {
+        ['TP','HM','MO','UV','RN'].forEach(k => { if (r[k] != null) addToSparkBuffer(k, r[k]); });
       });
-      updateAllSparklines();
-      
-      console.log(`📊 Loaded ${readings.length} readings into cache`);
+      updateMiniSparks();
+      updateMultiChart();
     }
-    
-    const alertsRes = await fetch(`${apiUrl}/api/alerts?limit=10`);
-    const alerts = await alertsRes.json();
-    
-    if (Array.isArray(alerts) && alerts.length > 0) {
-      alerts.reverse().forEach(alert => addAlertToList(alert));
-    }
-  } catch (err) {
-    console.log('Could not fetch initial data:', err);
+    const ar = await fetch(`${apiUrl}/api/alerts?limit=8`);
+    const alerts = await ar.json();
+    if (Array.isArray(alerts)) alerts.slice().reverse().forEach(a => addAlertToList(a));
+  } catch(e) {
+    console.warn('Could not fetch initial data:', e);
+    // Use demo data so the UI isn't empty
+    seedDemoData();
   }
 }
 
-// === DASHBOARD UPDATES ===
+// ── Demo seed (used when no server) ──────────────────────────
+function seedDemoData() {
+  const now = Date.now();
+  const demo = Array.from({length:24},(_,i)=>({
+    TP: 27 + Math.sin(i/4)*5 + Math.random(),
+    HM: 75 + Math.cos(i/3)*10 + Math.random()*2,
+    MO: 48 - i*.4 + Math.random()*3,
+    UV: i >= 6 && i <= 18 ? Math.max(0, 7*Math.sin(Math.PI*(i-6)/12) + Math.random()) : 0,
+    RN: Math.random() < .25 ? Math.random()*30 : 0,
+    HI: 30 + Math.sin(i/4)*6,
+    Pump: i>14 && i<18 ? 1 : 0,
+    Time: new Date(now - (23-i)*3600000).toLocaleTimeString(),
+    timestamp: new Date(now - (23-i)*3600000).toISOString(),
+  }));
+  allReadingsCache = demo;
+  historyData = demo.slice(-MAX_HISTORY).slice().reverse();
+  renderHistory();
+  updateDashboard(demo[demo.length-1]);
+  demo.forEach(r => { ['TP','HM','MO','UV','RN'].forEach(k=>{ if(r[k]!=null) addToSparkBuffer(k,r[k]); }); });
+  updateMiniSparks();
+  updateMultiChart();
+}
+
+// ── Readings cache ────────────────────────────────────────────
+function cacheReading(data) {
+  allReadingsCache.push({ ...data, timestamp: data.timestamp || new Date().toISOString() });
+  if (allReadingsCache.length > 500) allReadingsCache.shift();
+}
+
+// ── Dashboard update ──────────────────────────────────────────
 function updateDashboard(data) {
-  updateUVGauge(data.UV);
-  updateHeatIndexGauge(data.HI);
-  
-  // Trend values
-  updateTrendValue('tempTrendValue', data.TP);
-  updateTrendValue('humTrendValue', data.HM);
-  updateTrendValue('moistTrendValue', data.MO);
-  updateTrendValue('rainTrendValue', data.RN);
-  
-  updatePumpStatus(data.Pump);
+  // UV ring
+  updateUVRing(data.UV);
+  // Heat Index needle
+  updateHINeedle(data.HI, data.TP, data.HM);
+  // Stat strip — update inner span values (units are in sibling .stat-unit spans)
+  setSpanText('sc-tp-val', formatVal(data.TP, 1));
+  setSpanText('sc-hm-val', formatVal(data.HM, 0));
+  setSpanText('sc-uv-val', formatVal(data.UV, 1));
+  setSpanText('sc-mo-val', formatVal(data.MO, 0));
+  setSpanText('sc-rn-val', formatVal(data.RN, 0));
+  // Temperature big card
+  flashSet('tempBig', formatVal(data.TP, 1));
+  computeTempStats();
+  // Trend badges
+  setTrend('trend-tp', data.TP, 'TP');
+  setTrend('trend-hm', data.HM, 'HM');
+  setTrend('trend-mo', data.MO, 'MO');
+  // Donuts
+  updateDonut('soilDonut', data.MO, 100, 'soilVal', '%', 'soilZone');
+  updateDonut('humDonut',  data.HM, 100, 'humVal',  '%', 'humZone');
+  // Pump
+  updatePump(data.Pump);
+  // UV badge
+  updateUVBadge(data.UV);
+  // Save prev
+  ['TP','HM','MO','UV','RN'].forEach(k => { if (data[k] != null) prevReadings[k] = data[k]; });
 }
 
-function updateUVGauge(uv) {
-  if (uv === undefined || uv === null) return;
-  
-  const maxUV = 11;
-  const percentage = Math.min(uv / maxUV, 1);
-  const circumference = 2 * Math.PI * 85;
-  const offset = circumference - (percentage * circumference);
-  
-  const progress = document.getElementById('uvProgress');
-  const valueEl = document.getElementById('uvValue');
-  const labelEl = document.getElementById('uvLabel');
-  const badgeEl = document.getElementById('uvBadge');
-  const cardEl = document.getElementById('uvCard');
-  
-  progress.style.strokeDasharray = circumference;
-  progress.style.strokeDashoffset = offset;
-  
-  valueEl.textContent = uv.toFixed(1);
-  valueEl.classList.add('updating');
-  setTimeout(() => valueEl.classList.remove('updating'), 500);
-  
-  let status, color, badgeClass;
-  if (uv <= 2) {
-    status = 'LOW'; color = '#3fb950'; badgeClass = '';
-  } else if (uv <= 5) {
-    status = 'MODERATE'; color = '#d29922'; badgeClass = 'warning';
-  } else if (uv <= 7) {
-    status = 'HIGH'; color = '#db6d28'; badgeClass = 'warning';
-  } else {
-    status = 'VERY HIGH'; color = '#f85149'; badgeClass = 'danger';
-  }
-  
-  labelEl.textContent = status;
-  progress.style.stroke = color;
-  valueEl.style.color = color;
-  
-  badgeEl.textContent = status;
-  badgeEl.className = 'card-badge' + (badgeClass ? ' ' + badgeClass : '');
-  
-  cardEl.classList.toggle('uv-alert', uv > 5);
+function formatVal(v, dec=1) {
+  if (v == null || isNaN(v)) return '--';
+  return Number(v).toFixed(dec);
 }
 
-function updateHeatIndexGauge(hi) {
-  if (hi === undefined || hi === null) return;
-  
-  const valueEl = document.getElementById('hiValue');
-  const needle = document.getElementById('hiNeedle');
-  
-  valueEl.textContent = hi.toFixed(1);
-  valueEl.classList.add('updating');
-  setTimeout(() => valueEl.classList.remove('updating'), 500);
-  
-  const minHI = 20, maxHI = 50;
-  const normalizedHI = Math.max(minHI, Math.min(maxHI, hi));
-  const percentage = (normalizedHI - minHI) / (maxHI - minHI);
-  const angle = -90 + (percentage * 180);
-  
-  needle.style.transform = `rotate(${angle}deg)`;
-}
-
-function updateTrendValue(id, value) {
-  if (value === undefined || value === null) return;
+// Set text on a plain element (no child spans to preserve)
+function flashSet(id, text) {
   const el = document.getElementById(id);
-  el.textContent = typeof value === 'number' ? value.toFixed(1) : value;
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('updating');
+  void el.offsetWidth;
   el.classList.add('updating');
   setTimeout(() => el.classList.remove('updating'), 500);
 }
 
-function updatePumpStatus(pumpOn) {
-  const card = document.getElementById('pumpCard');
-  const visual = document.getElementById('pumpVisual');
-  const status = document.getElementById('pumpStatus');
-  const label = document.getElementById('pumpLabel');
-  
-  const isOn = pumpOn === 1;
-  
-  visual.classList.toggle('active', isOn);
-  status.textContent = isOn ? 'ON' : 'OFF';
-  status.classList.toggle('on', isOn);
-  label.textContent = isOn ? 'Irrigating...' : 'System Idle';
+// Set text on a <span> inside a stat-num (preserves sibling .stat-unit)
+function setSpanText(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('updating');
+  void el.offsetWidth;
+  el.classList.add('updating');
+  setTimeout(() => el.classList.remove('updating'), 500);
 }
 
-// === SPARKLINES ===
-function initSparklines() {
-  const config = (canvasId) => {
-    const ctx = document.getElementById(canvasId);
-    if (!ctx) return null;
-    
-    const colors = getChartColors();
-    
-    return new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          data: [],
-          borderColor: colors.primary,
-          backgroundColor: hexToRgba(colors.primary, 0.1),
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-          pointHoverRadius: 4
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { display: false }
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index'
-        }
+function flash(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('updating');
+  void el.offsetWidth;
+  el.classList.add('updating');
+}
+
+// ── UV Ring ───────────────────────────────────────────────────
+function updateUVRing(uv) {
+  if (uv == null) return;
+  const circ = 2 * Math.PI * 66; // ~415
+  const pct  = Math.min(uv / 11, 1);
+  const offset = circ - pct * circ;
+  const ring = document.getElementById('uvRingFill');
+  if (ring) ring.style.strokeDashoffset = offset;
+
+  const valEl   = document.getElementById('uvValue');
+  const labelEl = document.getElementById('uvLabel');
+  const badgeEl = document.getElementById('uvBadge');
+  const cardEl  = document.getElementById('uvCard');
+
+  if (valEl) { valEl.textContent = Number(uv).toFixed(1); flash('uvValue'); }
+
+  let status, cls;
+  if (uv <= 2)      { status = 'Low';       cls = ''; }
+  else if (uv <= 5) { status = 'Moderate';  cls = 'badge-y'; }
+  else if (uv <= 7) { status = 'High';      cls = 'badge-y'; }
+  else              { status = 'Very High'; cls = 'badge-r'; }
+
+  if (labelEl) labelEl.textContent = status.toUpperCase();
+  if (badgeEl) { badgeEl.textContent = status; badgeEl.className = 'badge ' + cls; }
+  if (cardEl)  cardEl.classList.toggle('uv-alert', uv > 5);
+}
+
+// Also update stat-strip uv badge
+function updateUVBadge(uv) {
+  const b = document.getElementById('uv-badge');
+  if (!b || uv == null) return;
+  let status, cls;
+  if (uv <= 2)      { status='Low';       cls='badge-g'; }
+  else if (uv <= 5) { status='Moderate';  cls='badge-y'; }
+  else if (uv <= 7) { status='High';      cls='badge-y'; }
+  else              { status='Very High'; cls='badge-r'; }
+  b.textContent = status;
+  b.className = 'badge ' + cls;
+}
+
+// ── HI Needle ─────────────────────────────────────────────────
+function updateHINeedle(hi, tp, hm) {
+  const hiVal = hi != null ? hi : (tp != null ? tp : 35);
+  const val = document.getElementById('hiValue');
+  const needle = document.getElementById('hiNeedle');
+  const badge  = document.getElementById('hiBadge');
+  const prog   = document.getElementById('hiProgress');
+  const add    = document.getElementById('hiHumAdd');
+  const real   = document.getElementById('hiRealTemp');
+
+  if (val) { val.textContent = Number(hiVal).toFixed(1); flash('hiValue'); }
+
+  const pct = Math.max(0, Math.min(1, (hiVal - 20) / 30));
+  const deg = -90 + pct * 180;
+  if (needle) needle.style.transform = `rotate(${deg}deg)`;
+
+  let cls, label;
+  if (pct < .35)      { cls='badge-g'; label='Good'; }
+  else if (pct < .65) { cls='badge-y'; label='Caution'; }
+  else                { cls='badge-r'; label='Danger'; }
+  if (badge) { badge.textContent = label; badge.className = 'badge ' + cls; }
+  if (prog)  { prog.style.width = (pct*100)+'%'; }
+
+  const diff = hi != null && tp != null ? (hi - tp).toFixed(1) : '--';
+  if (add)  add.textContent  = diff !== '--' ? `+${diff}°` : '--';
+  if (real) real.textContent = tp != null ? `${Number(tp).toFixed(1)}°C` : '--';
+}
+
+// ── Trend badges ──────────────────────────────────────────────
+function setTrend(id, val, key) {
+  const el = document.getElementById(id);
+  if (!el || val == null) return;
+  const prev = prevReadings[key];
+  if (prev == null) return;
+  const diff = val - prev;
+  if (Math.abs(diff) < 0.1) { el.textContent=''; return; }
+  el.textContent = diff > 0 ? `↑ ${Math.abs(diff).toFixed(1)}` : `↓ ${Math.abs(diff).toFixed(1)}`;
+  el.className   = 'trend-badge ' + (diff > 0 ? 'trend-up' : 'trend-down');
+}
+
+// ── Donut update ─────────────────────────────────────────────
+function updateDonut(donutId, val, max, valId, unit, zoneId) {
+  if (val == null) return;
+  const circ = 2 * Math.PI * 40; // r=40
+  const pct  = Math.min(val / max, 1);
+  const offset = circ - pct * circ;
+  const d = document.getElementById(donutId);
+  if (d) d.style.strokeDashoffset = offset;
+  const v = document.getElementById(valId);
+  if (v) { v.textContent = Math.round(val) + unit; flash(valId); }
+  const z = document.getElementById(zoneId);
+  if (z) z.style.width = pct * 100 + '%';
+}
+
+// ── Pump update ───────────────────────────────────────────────
+function updatePump(pumpOn) {
+  const isOn = pumpOn === 1;
+  const pill = document.getElementById('pumpPill');
+  const dot  = document.getElementById('pumpDot');
+  const lbl  = document.getElementById('pumpLabel');
+  pill?.classList.toggle('active', isOn);
+  dot?.classList.toggle('active', isOn);
+  if (lbl) lbl.textContent = isOn ? 'Pump ON' : 'Pump OFF';
+}
+
+// ── Temp stats ────────────────────────────────────────────────
+function computeTempStats() {
+  const vals = allReadingsCache.map(r => r.TP).filter(v => v != null && !isNaN(v));
+  if (!vals.length) return;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  const el = id => document.getElementById(id);
+  const set = (id, v) => { const e=el(id); if(e) e.textContent = Number(v).toFixed(1)+'°'; };
+  set('tempMin', min); set('tempAvg', avg); set('tempMax', max);
+  const diff = vals.length > 1 ? (vals[vals.length-1] - vals[vals.length-2]).toFixed(1) : null;
+  const tag = document.getElementById('tempTrendTag');
+  if (tag && diff != null) {
+    tag.textContent = Number(diff) > 0 ? `↑ ${Math.abs(diff)}° from last reading` : `↓ ${Math.abs(diff)}° from last reading`;
+    tag.style.color = Number(diff) > 0 ? 'var(--accent-red)' : 'var(--accent)';
+  }
+}
+
+// ── Sparkline buffers ─────────────────────────────────────────
+function addToSparkBuffer(key, val) {
+  sparkData[key].push(val);
+  if (sparkData[key].length > MAX_SPARK) sparkData[key].shift();
+}
+function addToSparkBuffers(data) {
+  ['TP','HM','MO','UV','RN'].forEach(k => { if (data[k] != null) addToSparkBuffer(k, data[k]); });
+}
+
+// ── Mini sparklines ───────────────────────────────────────────
+function initMiniSparks() {
+  const cfg = (id, color) => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return null;
+    return new Chart(canvas, {
+      type:'line',
+      data:{ labels:[], datasets:[{ data:[], borderColor:color, backgroundColor:hexToRgba(color,.08), borderWidth:1.5, fill:true, tension:.4, pointRadius:0 }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales:{ x:{display:false}, y:{display:false} },
+        animation:{ duration:400 }
       }
     });
   };
-  
-  tempSparkline = config('tempSparkline');
-  humSparkline = config('humSparkline');
-  moistSparkline = config('moistSparkline');
-  uvSparkline = config('uvSparkline');
-  rainSparkline = config('rainSparkline');
+  tempSpark  = cfg('spark-tp','#ef4444');
+  humSpark   = cfg('spark-hm','#3b82f6');
+  uvSpark    = cfg('spark-uv','#eab308');
+  moistSpark = cfg('spark-mo','#22c55e');
+  rainSpark  = cfg('spark-rn','#9333ea');
+
+  // Also the dedicated sparkline canvases
+  initDedicatedSpark('tempSparkline',  '#ef4444');
+  initDedicatedSpark('rainSparkline',  '#9333ea');
+}
+function initDedicatedSpark(id, color) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const existing = Chart.getChart(canvas);
+  if (existing) existing.destroy();
+  new Chart(canvas, {
+    type:'line',
+    data:{ labels:[], datasets:[{ data:[], borderColor:color, backgroundColor:hexToRgba(color,.1), borderWidth:2, fill:true, tension:.4, pointRadius:0, pointHoverRadius:4 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ x:{display:false}, y:{display:false} },
+      animation:{ duration:600 }
+    }
+  });
 }
 
-function addToSparklineBuffer(sensor, value) {
-  if (value === undefined || value === null) return;
-  sparklineData[sensor].push(value);
-  if (sparklineData[sensor].length > MAX_SPARKLINE_POINTS) {
-    sparklineData[sensor].shift();
-  }
+function updateMiniSparks() {
+  updateSpark('spark-tp', sparkData.TP, tempSpark);
+  updateSpark('spark-hm', sparkData.HM, humSpark);
+  updateSpark('spark-uv', sparkData.UV, uvSpark);
+  updateSpark('spark-mo', sparkData.MO, moistSpark);
+  updateSpark('spark-rn', sparkData.RN, rainSpark);
+  updateDedicatedSpark('tempSparkline', sparkData.TP);
+  updateDedicatedSpark('rainSparkline', sparkData.RN);
 }
-
-function updateSparklineData(data) {
-  if (data.TP !== undefined) addToSparklineBuffer('TP', data.TP);
-  if (data.HM !== undefined) addToSparklineBuffer('HM', data.HM);
-  if (data.MO !== undefined) addToSparklineBuffer('MO', data.MO);
-  if (data.UV !== undefined) addToSparklineBuffer('UV', data.UV);
-  if (data.RN !== undefined) addToSparklineBuffer('RN', data.RN);
-  
-  updateAllSparklines();
-}
-
-function updateAllSparklines() {
-  updateSparklineChart(tempSparkline, sparklineData.TP);
-  updateSparklineChart(humSparkline, sparklineData.HM);
-  updateSparklineChart(moistSparkline, sparklineData.MO);
-  updateSparklineChart(uvSparkline, sparklineData.UV);
-  updateSparklineChart(rainSparkline, sparklineData.RN);
-}
-
-function updateSparklineChart(chart, data) {
-  if (!chart || data.length === 0) return;
-  
-  chart.data.labels = data.map((_, i) => i);
+function updateSpark(canvasId, data, chart) {
+  if (!chart || !data.length) return;
+  chart.data.labels   = data.map((_,i)=>i);
   chart.data.datasets[0].data = data;
   chart.update('none');
 }
+function updateDedicatedSpark(canvasId, data) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ch = Chart.getChart(canvas);
+  if (!ch || !data.length) return;
+  ch.data.labels = data.map((_,i)=>i);
+  ch.data.datasets[0].data = data;
+  ch.update('none');
+}
 
-// === HISTORY TABLE ===
+// ── Multi-sensor chart ─────────────────────────────────────────
+function initMultiChart() {
+  const canvas = document.getElementById('multiChart');
+  if (!canvas) return;
+
+  const demo = Array.from({length:24},(_,i)=>i);
+  multiChart = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels: demo.map(h=>`${String(h).padStart(2,'0')}:00`),
+      datasets:[
+        { label:'Temp (°C)',   data:[], borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:1.5, tension:.4, pointRadius:0, pointHoverRadius:3, yAxisID:'y' },
+        { label:'Humidity (%)',data:[], borderColor:'#3b82f6', backgroundColor:'transparent', borderWidth:1.5, tension:.4, pointRadius:0, pointHoverRadius:3, yAxisID:'y' },
+        { label:'Soil (%)',    data:[], borderColor:'#22c55e', backgroundColor:'transparent', borderWidth:1.5, tension:.4, pointRadius:0, pointHoverRadius:3, yAxisID:'y' },
+        { label:'UV',          data:[], borderColor:'#eab308', backgroundColor:'transparent', borderWidth:1.5, tension:.4, pointRadius:0, pointHoverRadius:3, borderDash:[4,3], yAxisID:'y2' },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ intersect:false, mode:'index' },
+      animation:{ duration:800 },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{
+          backgroundColor:'rgba(10,13,17,.92)',
+          titleColor:'#e8edf2', bodyColor:'#8b97a4',
+          padding:10, cornerRadius:8, borderWidth:0,
+          callbacks:{ label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}` }
+        }
+      },
+      scales:{
+        x:{ display:false, grid:{display:false} },
+        y:{ display:false, min:0, max:100 },
+        y2:{ display:false, min:0, max:12 }
+      }
+    }
+  });
+}
+
+function updateMultiChart() {
+  if (!multiChart) return;
+  const recent = allReadingsCache.slice(-48);
+  multiChart.data.labels = recent.map(r => {
+    const d = r.timestamp ? new Date(r.timestamp) : new Date();
+    return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  });
+  multiChart.data.datasets[0].data = recent.map(r => r.TP);
+  multiChart.data.datasets[1].data = recent.map(r => r.HM);
+  multiChart.data.datasets[2].data = recent.map(r => r.MO);
+  multiChart.data.datasets[3].data = recent.map(r => r.UV);
+  multiChart.update('none');
+}
+
+// ── UV Hour Bars ──────────────────────────────────────────────
+function buildUVHourBars() {
+  const container = document.getElementById('uvHourBars');
+  if (!container) return;
+  const hourH = new Date().getHours();
+  const profile=[0,0,0,0,0,0,.2,.8,2,3.5,5.2,6.5,6.8,7,6.8,6,4.8,3.2,1.8,.6,.1,0,0,0];
+  const slice = profile.slice(6, 21);
+  container.innerHTML = '';
+  slice.forEach((v,i)=>{
+    const bar = document.createElement('div');
+    bar.className = 'uv-bar' + (6+i === hourH ? ' current' : '');
+    const col = v >= 7 ? '#ef4444' : v >= 5 ? '#eab308' : v >= 2 ? '#f97316' : '#22c55e';
+    const pct = (v/7.5*100);
+    bar.style.cssText = `height:${Math.max(pct,5)}%;background:${col}${6+i===hourH?'':'88'};animation-delay:${i*.04}s`;
+    container.appendChild(bar);
+  });
+}
+
+// ── Rain Bars ─────────────────────────────────────────────────
+function buildRainBars() {
+  const container = document.getElementById('rainBars');
+  if (!container) return;
+  const data = [5, 18, 0, 8, 30, 12, 3];
+  const total = data.reduce((a,b)=>a+b,0);
+  container.innerHTML = '';
+  data.forEach((v,i)=>{
+    const bar = document.createElement('div');
+    bar.className = 'rain-bar';
+    bar.style.cssText = `height:${Math.max(v/32*100,4)}%;animation-delay:${i*.07}s`;
+    bar.title = `${v}mm`;
+    container.appendChild(bar);
+  });
+  const rt = document.getElementById('rainTotal');
+  const pc = document.getElementById('pumpCycles');
+  if (rt) rt.textContent = total + 'mm';
+  if (pc) pc.textContent = '8';
+}
+
+// ── Heatmap ───────────────────────────────────────────────────
+function buildHeatmap() {
+  const container = document.getElementById('heatmap');
+  if (!container) return;
+  container.innerHTML = '';
+  // 7 days x 4 rows = 28 cells
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 4; h++) {
+      const v = 30 + Math.random() * 50;
+      const cell = document.createElement('div');
+      cell.className = 'hm-cell';
+      const norm = (v - 20) / 70;
+      let col;
+      if (norm < .3)      col = `rgba(239,68,68,${.2+norm})`;
+      else if (norm < .5) col = `rgba(234,179,8,${.25+norm*.8})`;
+      else                col = `rgba(34,197,94,${.3+norm*.7})`;
+      cell.style.background = col;
+      cell.title = `${v.toFixed(0)}%`;
+      container.appendChild(cell);
+    }
+  }
+}
+
+// ── History ───────────────────────────────────────────────────
 function addToHistory(data) {
   historyData.unshift(data);
-  if (historyData.length > MAX_HISTORY) {
-    historyData.pop();
-  }
+  if (historyData.length > MAX_HISTORY) historyData.pop();
   renderHistory();
 }
-
 function renderHistory() {
   const tbody = document.getElementById('historyBody');
-  
-  if (historyData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Waiting for data...</td></tr>';
-    document.getElementById('readingCount').textContent = '0';
+  const count = document.getElementById('readingCount');
+  if (!tbody) return;
+  if (!historyData.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Waiting for data…</td></tr>';
+    if (count) count.textContent = '0';
     return;
   }
-  
-  tbody.innerHTML = historyData.map(d => `
-    <tr>
+  tbody.innerHTML = historyData.map((d,i) => `
+    <tr style="animation:fadeSlideIn .25s ${i*.04}s both">
       <td>${d.Time || '--'}</td>
-      <td>${d.TP?.toFixed(1) ?? '--'}</td>
-      <td>${d.HM?.toFixed(0) ?? '--'}</td>
-      <td>${d.UV?.toFixed(1) ?? '--'}</td>
-      <td>${d.RN?.toFixed(0) ?? '--'}</td>
-      <td>${d.MO?.toFixed(0) ?? '--'}</td>
-      <td class="${d.Pump ? 'pump-on' : 'pump-off'}">${d.Pump ? 'ON' : 'OFF'}</td>
+      <td>${d.TP != null ? Number(d.TP).toFixed(1) : '--'}°</td>
+      <td>${d.HM != null ? Number(d.HM).toFixed(0) : '--'}%</td>
+      <td>${d.UV != null ? Number(d.UV).toFixed(1) : '--'}</td>
+      <td>${d.RN != null ? Number(d.RN).toFixed(0) : '--'}%</td>
+      <td>${d.MO != null ? Number(d.MO).toFixed(0) : '--'}%</td>
+      <td class="${d.Pump ? 'pump-on-cell' : 'pump-off-cell'}">${d.Pump ? 'ON' : 'OFF'}</td>
     </tr>
   `).join('');
-  
-  document.getElementById('readingCount').textContent = historyData.length;
+  if (count) count.textContent = historyData.length;
 }
 
-// === ALERTS ===
-function showAlertToast(alert) {
+// ── Alerts ────────────────────────────────────────────────────
+function showToast(alert) {
   const container = document.getElementById('alertContainer');
-  
+  if (!container) return;
   const toast = document.createElement('div');
   toast.className = `alert-toast ${alert.type}`;
   toast.innerHTML = `
-    <span class="alert-toast-icon">${alert.type === 'uv_high' ? '⚠️' : '✅'}</span>
-    <div class="alert-toast-content">
-      <div class="alert-toast-title">${alert.type === 'uv_high' ? 'UV HIGH ALERT' : 'UV SAFE'}</div>
+    <div>
+      <div class="alert-toast-title">${alert.type==='uv_high' ? '⚠️ UV HIGH' : '✅ UV SAFE'}</div>
       <div class="alert-toast-msg">${alert.message}</div>
       <div class="alert-toast-time">${new Date(alert.timestamp).toLocaleTimeString()}</div>
     </div>
-    <button class="alert-toast-close" onclick="this.parentElement.remove()">×</button>
+    <button class="alert-toast-close" onclick="this.closest('.alert-toast').remove()">×</button>
   `;
-  
   container.appendChild(toast);
   playAlertSound(alert.type);
-  
-  setTimeout(() => {
-    if (toast.parentElement) toast.remove();
-  }, 10000);
+  setTimeout(()=>{ if(toast.parentElement) toast.remove(); }, 10000);
 }
 
 function addAlertToList(alert) {
   const list = document.getElementById('alertsList');
-  
-  const empty = list.querySelector('.empty-state');
-  if (empty) empty.remove();
-  
+  if (!list) return;
   const item = document.createElement('div');
-  item.className = `alert-item ${alert.type}`;
+  item.className = 'alert-item';
+  const dotColor = alert.type==='uv_high' ? '#ef4444' : alert.type==='uv_low' ? '#22c55e' : '#eab308';
   item.innerHTML = `
-    <div class="alert-item-msg">${alert.message}</div>
-    <div class="alert-item-time">${new Date(alert.timestamp).toLocaleString()}</div>
+    <div class="alert-dot" style="background:${dotColor}"></div>
+    <div>
+      <div class="alert-item-msg">${alert.message}</div>
+      <div class="alert-item-time">${new Date(alert.timestamp).toLocaleString()}</div>
+    </div>
   `;
-  
   list.prepend(item);
-  
-  while (list.children.length > 10) {
-    list.lastChild.remove();
-  }
-  
-  document.getElementById('alertCount').textContent = list.querySelectorAll('.alert-item').length;
+  while (list.children.length > 5) list.lastChild.remove();
 }
 
-// === MODAL / GRAPH ===
+// ── Graph Modal ───────────────────────────────────────────────
 function showGraph(sensor, title, unit, icon) {
-  currentSensor = { code: sensor, title, unit, icon };
-  
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalSubtitle').textContent = currentTimeRange >= 168 ? 'Last 7 days' : `Last ${currentTimeRange} hour${currentTimeRange > 1 ? 's' : ''}`;
-  document.getElementById('modalIcon').textContent = icon;
-  
-  document.querySelectorAll('.range-btn').forEach(btn => {
-    btn.classList.toggle('active', parseInt(btn.dataset.hours) === currentTimeRange);
-  });
-  
+  currentSensor = { code:sensor, title, unit, icon };
+  document.getElementById('modalTitle').textContent    = title;
+  document.getElementById('modalSubtitle').textContent = `Last ${currentTimeRange} hours`;
+  document.getElementById('modalIcon').textContent     = icon;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', +b.dataset.hours === currentTimeRange));
   document.getElementById('graphModal').classList.add('active');
-  
   loadGraphData();
 }
-
 function closeGraphModal() {
   document.getElementById('graphModal').classList.remove('active');
-  
-  if (mainChart) {
-    mainChart.destroy();
-    mainChart = null;
-  }
+  if (mainChart) { mainChart.destroy(); mainChart = null; }
 }
-
 function changeTimeRange(hours) {
   if (currentTimeRange === hours) return;
-  
   currentTimeRange = hours;
-  
-  document.querySelectorAll('.range-btn').forEach(btn => {
-    const isActive = parseInt(btn.dataset.hours) === hours;
-    btn.classList.toggle('active', isActive);
-    
-    if (isActive) {
-      btn.style.transform = 'scale(1.05)';
-      setTimeout(() => {
-        btn.style.transform = '';
-      }, 150);
-    }
-  });
-  
-  const subtitle = document.getElementById('modalSubtitle');
-  subtitle.style.opacity = '0.5';
-  setTimeout(() => {
-    subtitle.textContent = hours >= 168 ? 'Last 7 days' : `Last ${hours} hour${hours > 1 ? 's' : ''}`;
-    subtitle.style.opacity = '1';
-  }, 150);
-  
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', +b.dataset.hours === hours));
+  const sub = document.getElementById('modalSubtitle');
+  if (sub) sub.textContent = hours >= 168 ? 'Last 7 days' : `Last ${hours} hour${hours>1?'s':''}`;
   loadGraphData();
 }
 
 async function loadGraphData() {
   if (!currentSensor) return;
-  
-  console.log(`Loading graph data for ${currentSensor.code}, last ${currentTimeRange} hours`);
-  
-  const chartWrapper = document.querySelector('.chart-wrapper');
-  chartWrapper.style.opacity = '0.5';
-  chartWrapper.style.pointerEvents = 'none';
-  
+  const cw = document.querySelector('.chart-wrapper');
+  if (cw) { cw.style.opacity='.5'; cw.style.pointerEvents='none'; }
   try {
     let data = [];
-    
     try {
       const res = await fetch(`${apiUrl}/api/readings/${currentSensor.code}?hours=${currentTimeRange}&limit=500`);
-      if (res.ok) {
-        data = await res.json();
-        console.log(`API returned ${data.length} points for ${currentSensor.code}`);
-      }
-    } catch (apiErr) {
-      console.log('Sensor API failed, using cache:', apiErr);
-    }
-    
-    if (!data || data.length === 0) {
-      console.log('Using local cache for graph data');
-      data = getGraphDataFromCache(currentSensor.code, currentTimeRange);
-    }
-    
-    if (!data || data.length === 0) {
-      console.log('No data available for graph');
-      showNoDataMessage();
-      return;
-    }
-    
+      if (res.ok) data = await res.json();
+    } catch(e) {}
+    if (!data?.length) data = getFromCache(currentSensor.code, currentTimeRange);
+    if (!data?.length) { showNoData(); return; }
     renderMainChart(data);
-    updateChartStats(data);
-  } catch (err) {
-    console.error('Error loading graph data:', err);
-    showNoDataMessage();
-  } finally {
-    chartWrapper.style.opacity = '1';
-    chartWrapper.style.pointerEvents = '';
-  }
+    computeStats(data);
+  } catch(e) { showNoData(); }
+  finally { if(cw){cw.style.opacity='1';cw.style.pointerEvents='';} }
 }
 
-function getGraphDataFromCache(sensorCode, hours) {
-  const now = Date.now();
-  const cutoff = now - (hours * 60 * 60 * 1000);
-  
-  const filtered = allReadingsCache.filter(r => {
-    const ts = r.timestamp ? new Date(r.timestamp).getTime() : now;
-    return ts >= cutoff;
-  });
-  
-  return filtered.map(r => ({
-    timestamp: r.timestamp || new Date().toISOString(),
-    value: r[sensorCode],
-    time: r.Time
-  })).filter(d => d.value !== undefined && d.value !== null);
+function getFromCache(code, hours) {
+  const cutoff = Date.now() - hours * 3600000;
+  return allReadingsCache
+    .filter(r => new Date(r.timestamp||Date.now()).getTime() >= cutoff)
+    .map(r => ({ timestamp:r.timestamp, value:r[code], time:r.Time }))
+    .filter(d => d.value != null);
 }
 
-function showNoDataMessage() {
-  const ctx = document.getElementById('sensorChart').getContext('2d');
-  
-  if (mainChart) {
-    mainChart.destroy();
-  }
-  
+function showNoData() {
+  const ctx = document.getElementById('sensorChart')?.getContext('2d');
+  if (!ctx) return;
+  if (mainChart) { mainChart.destroy(); }
   mainChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: ['No Data'],
-      datasets: [{
-        data: [0],
-        borderColor: 'transparent',
-        backgroundColor: 'transparent'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: true,
-          text: 'No data available for this time range',
-          color: getChartColors().textMuted,
-          font: { size: 16 }
-        }
-      },
-      scales: {
-        x: { display: false },
-        y: { display: false }
-      }
-    }
+    type:'line',
+    data:{ labels:['No data'], datasets:[{ data:[0], borderColor:'transparent' }] },
+    options:{ plugins:{ legend:{display:false}, title:{display:true,text:'No data for this range',color:'#8b97a4',font:{size:14}} }, scales:{ x:{display:false}, y:{display:false} } }
   });
-  
-  document.getElementById('statCurrent').textContent = '--';
-  document.getElementById('statAvg').textContent = '--';
-  document.getElementById('statMin').textContent = '--';
-  document.getElementById('statMax').textContent = '--';
+  ['statCurrent','statAvg','statMin','statMax'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='--'; });
 }
 
 function renderMainChart(data) {
-  const colors = getChartColors();
-  const ctx = document.getElementById('sensorChart').getContext('2d');
-  
-  if (mainChart) {
-    mainChart.destroy();
-  }
-  
+  const c = getChartColors();
+  const ctx = document.getElementById('sensorChart')?.getContext('2d');
+  if (!ctx) return;
+  if (mainChart) mainChart.destroy();
+
   const labels = data.map(d => {
-    if (d.timestamp) {
-      const date = new Date(d.timestamp);
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    }
+    if (d.timestamp) return new Date(d.timestamp).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
     return d.time || '--';
   });
-  
   const values = data.map(d => d.value);
-  
+
+  const sensorColors = { TP:'#ef4444', HM:'#3b82f6', MO:'#22c55e', UV:'#eab308', RN:'#9333ea' };
+  const col = sensorColors[currentSensor.code] || c.primary;
+
   mainChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: currentSensor.title,
-        data: values,
-        borderColor: colors.primary,
-        backgroundColor: hexToRgba(colors.primary, 0.1),
-        borderWidth: 3,
-        fill: true,
-        tension: 0.4,
-        pointRadius: data.length > 50 ? 0 : 3,
-        pointHoverRadius: 6,
-        pointBackgroundColor: colors.primary,
-        pointBorderColor: colors.bg,
-        pointBorderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        intersect: false,
-        mode: 'index'
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: colors.bg,
-          titleColor: colors.text,
-          bodyColor: colors.text,
-          borderColor: colors.grid,
-          borderWidth: 1,
-          padding: 12,
-          displayColors: false,
-          callbacks: {
-            label: (ctx) => `${ctx.parsed.y?.toFixed(1) || '--'}${currentSensor.unit}`
-          }
+    type:'line',
+    data:{ labels, datasets:[{
+      label: currentSensor.title, data: values,
+      borderColor: col,
+      backgroundColor: hexToRgba(col, .1),
+      borderWidth: 2.5, fill:true, tension:.4,
+      pointRadius: data.length > 60 ? 0 : 3,
+      pointHoverRadius: 5,
+      pointBackgroundColor: col,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      interaction:{ intersect:false, mode:'index' },
+      animation:{ duration:600 },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor: 'rgba(10,13,17,.92)',
+          titleColor:'#e8edf2', bodyColor:'#8b97a4',
+          padding:12, cornerRadius:8,
+          displayColors:false,
+          callbacks:{ label: ctx => `${ctx.parsed.y?.toFixed(1)||'--'}${currentSensor.unit}` }
         }
       },
-      scales: {
-        x: {
-          grid: { color: colors.grid, drawBorder: false },
-          ticks: {
-            color: colors.textMuted,
-            maxRotation: 45,
-            autoSkip: true,
-            maxTicksLimit: 12
-          }
-        },
-        y: {
-          grid: { color: colors.grid, drawBorder: false },
-          ticks: {
-            color: colors.textMuted,
-            callback: (v) => v + currentSensor.unit
-          }
-        }
+      scales:{
+        x:{ grid:{color:c.grid,drawBorder:false}, ticks:{color:c.muted,maxRotation:45,autoSkip:true,maxTicksLimit:10} },
+        y:{ grid:{color:c.grid,drawBorder:false}, ticks:{color:c.muted,callback:v=>v+currentSensor.unit} }
       }
     }
   });
 }
 
-function updateChartStats(data) {
-  const values = data.map(d => d.value).filter(v => v !== null && v !== undefined && !isNaN(v));
-  
-  if (values.length === 0) {
-    document.getElementById('statCurrent').textContent = '--';
-    document.getElementById('statAvg').textContent = '--';
-    document.getElementById('statMin').textContent = '--';
-    document.getElementById('statMax').textContent = '--';
-    return;
-  }
-  
-  const current = values[values.length - 1];
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  
-  const unit = currentSensor.unit;
-  
-  document.getElementById('statCurrent').textContent = current.toFixed(1) + unit;
-  document.getElementById('statAvg').textContent = avg.toFixed(1) + unit;
-  document.getElementById('statMin').textContent = min.toFixed(1) + unit;
-  document.getElementById('statMax').textContent = max.toFixed(1) + unit;
+function computeStats(data) {
+  const vals = data.map(d=>d.value).filter(v=>v!=null&&!isNaN(v));
+  if (!vals.length) return;
+  const cur = vals[vals.length-1];
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const u = currentSensor.unit;
+  const set = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=Number(v).toFixed(1)+u; };
+  set('statCurrent',cur); set('statAvg',avg); set('statMin',min); set('statMax',max);
 }
 
-// === UTILITIES ===
+// ── Utilities ─────────────────────────────────────────────────
 function hexToRgba(hex, alpha) {
-  if (!hex || hex.length < 7) return `rgba(63, 185, 80, ${alpha})`;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  if (!hex || hex.startsWith('--') || hex.startsWith('rgba') || hex.startsWith('rgb')) {
+    return `rgba(34,197,94,${alpha})`;
+  }
+  const clean = hex.replace('#','');
+  if (clean.length < 6) return `rgba(34,197,94,${alpha})`;
+  const r = parseInt(clean.slice(0,2),16);
+  const g = parseInt(clean.slice(2,4),16);
+  const b = parseInt(clean.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// === GLOBAL EXPORTS ===
-window.setTheme = setTheme;
-window.toggleThemeMenu = toggleThemeMenu;
-window.toggleSound = toggleSound;
-window.showGraph = showGraph;
-window.closeGraphModal = closeGraphModal;
-window.changeTimeRange = changeTimeRange;
+// ── Global exports ────────────────────────────────────────────
+window.setTheme       = setTheme;
+window.toggleThemeMenu= toggleThemeMenu;
+window.toggleSound    = toggleSound;
+window.showGraph      = showGraph;
+window.closeGraphModal= closeGraphModal;
+window.changeTimeRange= changeTimeRange;
